@@ -147,6 +147,9 @@ def classify(
     threshold: float = typer.Option(0.55, help="below this, hold for human review"),
     ocr: str = typer.Option("claude", help="OCR backend for scanned input: claude or tesseract"),
     examples: Path = typer.Option(None, help="few-shot example set from `prompt build`"),
+    model_path: Path = typer.Option(
+        MODELS / "baseline.joblib", help="trained artifact; baseline backend only"
+    ),
     limit: int = typer.Option(0, help="stop after N documents (0 = all)"),
     out: Path = typer.Option(RUNS / "predictions.jsonl"),
 ) -> None:
@@ -196,7 +199,7 @@ def classify(
         effort=effort,
         review_threshold=threshold,
         examples=example_set,
-        model_path=MODELS / "baseline.joblib",
+        model_path=model_path,
     )
 
     with console.status(f"Classifying {len(docs)} document(s) via {clf.name}..."):

@@ -16,6 +16,12 @@ env:
   # here rather than silently costing money or passing for the wrong reason.
   ANTHROPIC_API_KEY: ""
   PYTHONUTF8: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+# uv is the local development tool (see README), but CI installs with pip into
+# a setup-python interpreter. `uv pip install --system` fails on the Ubuntu
+# runners, whose system Python is PEP 668 externally-managed; the boring path
+# behaves identically on both operating systems.
 
 jobs:
   lint:
@@ -23,12 +29,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
         with:
-          enable-cache: true
-      - run: uv python install 3.12
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - name: Install
-        run: uv pip install --system -e ".[dev]"
+        run: pip install -e ".[dev]"
       - name: Ruff (lint)
         run: ruff check --output-format=github .
       - name: Ruff (format)
@@ -48,12 +55,13 @@ jobs:
         python: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
         with:
-          enable-cache: true
-      - run: uv python install ${{ matrix.python }}
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - name: Install
-        run: uv pip install --system -e ".[dev]"
+        run: pip install -e ".[dev]"
       - name: Tests
         run: pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under=85
       - name: Upload coverage
@@ -69,12 +77,13 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
         with:
-          enable-cache: true
-      - run: uv python install 3.12
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - name: Install
-        run: uv pip install --system -e ".[dev]"
+        run: pip install -e ".[dev]"
       # Every step below runs with no API key, proving the offline path is
       # genuinely offline and that the commands compose end to end.
       - name: Taxonomy validates
@@ -86,7 +95,7 @@ jobs:
       - name: Classify and evaluate
         run: |
           docrouter classify data/generated/ci.jsonl --backend baseline \
-            --out runs/ci_preds.jsonl
+            --model-path models/ci.joblib --out runs/ci_preds.jsonl
           docrouter evaluate --dataset data/generated/ci.jsonl \
             --predictions runs/ci_preds.jsonl --out runs/ci_report.json
       - name: Threshold sweep
