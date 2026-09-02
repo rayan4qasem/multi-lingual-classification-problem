@@ -22,33 +22,15 @@ since those carry routing signal.
 
 from __future__ import annotations
 
-import re
 from collections import defaultdict
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
 from .models import Document
+from .privacy import redact
 from .taxonomy import Taxonomy
 from .taxonomy import load as load_taxonomy
-
-# Ordered: the specific patterns must win before the generic digit-run rule.
-_REDACTIONS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.]+\b"), "[بريد]"),
-    (re.compile(r"\bSA\d{22}\b", re.I), "[آيبان]"),
-    (re.compile(r"\b3\d{14}\b"), "[رقم ضريبي]"),
-    (re.compile(r"(?:\+?966|00966|0)5\d{8}\b"), "[جوال]"),
-    (re.compile(r"\b[12]\d{9}\b"), "[رقم هوية]"),
-    # Anything else long enough to identify a person or a file.
-    (re.compile(r"\b\d{9,}\b"), "[رقم]"),
-]
-
-
-def redact(text: str) -> str:
-    """Mask identifiers while leaving dates and amounts intact."""
-    for pattern, placeholder in _REDACTIONS:
-        text = pattern.sub(placeholder, text)
-    return text
 
 
 class Example(BaseModel):

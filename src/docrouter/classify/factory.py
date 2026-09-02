@@ -62,6 +62,7 @@ def _build_llm(
     review_threshold: float = 0.55,
     client=None,
     examples=None,
+    redact_pii: bool = True,
     **_ignored,
 ) -> Classifier:
     return LLMClassifier(
@@ -71,6 +72,7 @@ def _build_llm(
         review_threshold=review_threshold,
         client=client,
         examples=examples,
+        redact_pii=redact_pii,
     )
 
 

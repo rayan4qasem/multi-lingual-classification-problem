@@ -25,6 +25,7 @@ from .. import DEFAULT_MODEL
 from ..fewshot import ExampleSet
 from ..fewshot import render as render_examples
 from ..models import Alternative, Document, LLMClassification, Prediction
+from ..privacy import redact, scan
 from ..taxonomy import Taxonomy
 from ..taxonomy import load as load_taxonomy
 
@@ -86,10 +87,13 @@ def build_schema(taxonomy: Taxonomy) -> dict:
     }
 
 
-def _prepare_text(doc: Document) -> str:
+def _prepare_text(doc: Document, redact_pii: bool = True) -> str:
     text = doc.text.strip()
     if not text:
         return "[الوثيقة فارغة أو تعذّرت قراءتها]"
+    if redact_pii:
+        # Before truncation, so identifiers cannot survive in the tail.
+        text = redact(text)
     if len(text) <= MAX_DOC_CHARS:
         return text
     log.warning(
@@ -104,13 +108,13 @@ def _prepare_text(doc: Document) -> str:
     )
 
 
-def _user_content(doc: Document) -> str:
+def _user_content(doc: Document, redact_pii: bool = True) -> str:
     origin = "نص رقمي" if doc.source == "digital" else "نص مستخرج ضوئياً (قد يحتوي أخطاء)"
     return (
         f"مصدر النص: {origin}\n"
         f"عدد الصفحات: {doc.page_count}\n"
         "--- بداية الوثيقة ---\n"
-        f"{_prepare_text(doc)}\n"
+        f"{_prepare_text(doc, redact_pii=redact_pii)}\n"
         "--- نهاية الوثيقة ---"
     )
 
@@ -124,6 +128,7 @@ class LLMClassifier:
         review_threshold: float = 0.55,
         client: anthropic.Anthropic | None = None,
         examples: ExampleSet | None = None,
+        redact_pii: bool = True,
     ):
         self.taxonomy = taxonomy or load_taxonomy()
         self.model = model or os.environ.get("DOCROUTER_MODEL", DEFAULT_MODEL)
@@ -132,6 +137,12 @@ class LLMClassifier:
         self.client = client or anthropic.Anthropic()
         self.schema = build_schema(self.taxonomy)
         self.examples = examples
+        # On by default: every document goes to the API, so this is the
+        # system's largest exposure. Typed placeholders keep the routing
+        # signal, so the safe default is also the cheap one.
+        self.redact_pii = redact_pii
+        # Tally of what has been masked, for reporting after a run.
+        self.redaction_counts: dict[str, int] = {}
 
         # Examples join the cached prefix rather than the per-document turn.
         # They are rendered in sorted order and carry no timestamps, so the
@@ -142,7 +153,10 @@ class LLMClassifier:
     @property
     def name(self) -> str:
         n = len(self.examples.examples) if self.examples else 0
-        return f"llm:{self.model}+{n}shot" if n else f"llm:{self.model}"
+        base = f"llm:{self.model}+{n}shot" if n else f"llm:{self.model}"
+        # Recorded on every Prediction, so a run made without redaction is
+        # identifiable after the fact rather than indistinguishable.
+        return base if self.redact_pii else base + "+raw"
 
     def _system_blocks(self) -> list[dict]:
         # One block, one breakpoint: the whole prompt is stable across
@@ -178,10 +192,17 @@ class LLMClassifier:
             backend=self.name,
         )
 
+    def _track(self, doc: Document) -> None:
+        if not self.redact_pii:
+            return
+        for name, count in scan(doc.text).items():
+            self.redaction_counts[name] = self.redaction_counts.get(name, 0) + count
+
     def classify(self, doc: Document) -> Prediction:
+        self._track(doc)
         response = self.client.messages.create(
             **self._request_kwargs(),
-            messages=[{"role": "user", "content": _user_content(doc)}],
+            messages=[{"role": "user", "content": _user_content(doc, self.redact_pii)}],
         )
         if response.stop_reason == "refusal":
             raise RuntimeError(
@@ -201,6 +222,8 @@ class LLMClassifier:
         docs = list(docs)
         if not docs:
             raise ValueError("no documents to submit")
+        for doc in docs:
+            self._track(doc)
         kwargs = self._request_kwargs()
         batch = self.client.messages.batches.create(
             requests=[
@@ -211,7 +234,7 @@ class LLMClassifier:
                     # into the TypedDict's required keys.
                     params=MessageCreateParamsNonStreaming(  # type: ignore[typeddict-item]
                         **kwargs,
-                        messages=[{"role": "user", "content": _user_content(doc)}],
+                        messages=[{"role": "user", "content": _user_content(doc, self.redact_pii)}],
                     ),
                 )
                 for doc in docs

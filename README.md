@@ -87,7 +87,8 @@ Prediction                 institution_id · confidence · rationale_ar · alter
 | `mockdata.py` | Dataset engines — curated, template and LLM. |
 | `evaluate.py` | Scoring, with auto-routed vs held-for-review separated. |
 | `threshold.py` | Cut-off sweep, calibration check, held-out validation. |
-| `fewshot.py` | Gold labels → cached few-shot examples, with redaction. |
+| `privacy.py` | Identifier masking applied to everything sent to the API. |
+| `fewshot.py` | Gold labels → cached few-shot examples. |
 | `labeling/store.py` | Append-only label store. Decisions only, no text. |
 | `labeling/prioritize.py` | Builds the review batch: priority lane + random lane. |
 | `labeling/review.py` | Local, loopback-only review UI (RTL, keyboard-driven). |
@@ -388,7 +389,31 @@ revealed after the decision is recorded. `--no-blind-random` turns it off.
 
 ### Privacy
 
-Real documents mean real citizen data, so:
+**Every document sent for classification is redacted first.** National IDs,
+phone numbers, IBANs, tax numbers and emails are replaced with *typed*
+placeholders — `[رقم هوية]`, `[رقم ضريبي]` — before the request leaves the
+machine. The typing is what makes it free: "this document mentions a tax
+number" is the part that points at ZATCA, and it survives; the value that
+identifies a person does not. Dates, amounts and case numbers are untouched
+because they genuinely inform the routing decision.
+
+Measured, not assumed. Across the 86-document curated corpus, redaction masks
+37 identifiers and costs **nothing**:
+
+| | accuracy | macro F1 |
+|---|---:|---:|
+| unredacted | 80.2% | 0.801 |
+| redacted | 80.2% | 0.801 |
+
+`--no-redact` turns it off, warns, and marks the run's backend `+raw` so
+predictions made without it are identifiable afterwards.
+
+**What redaction cannot cover:** Claude-vision OCR uploads page *images* to be
+transcribed, and masking operates on text. A scanned document is therefore
+exposed in full during OCR regardless of this setting. Deployments that cannot
+accept that must use `--ocr tesseract`, which keeps transcription local.
+
+The rest:
 
 - The review UI is a **local** server bound to `127.0.0.1`. Nothing is
   published, and there are no CDN or outbound requests in the page.

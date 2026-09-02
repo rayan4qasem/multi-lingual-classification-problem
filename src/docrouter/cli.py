@@ -175,6 +175,9 @@ def classify(
     model_path: Path = typer.Option(
         MODELS / "baseline.joblib", help="trained artifact; baseline backend only"
     ),
+    redact: bool = typer.Option(
+        True, help="mask IDs, phones, IBANs, tax numbers and emails before sending"
+    ),
     limit: int = typer.Option(0, help="stop after N documents (0 = all)"),
     out: Path = typer.Option(RUNS / "predictions.jsonl"),
 ) -> None:
@@ -218,7 +221,14 @@ def classify(
         review_threshold=threshold,
         examples=example_set,
         model_path=model_path,
+        redact_pii=redact,
     )
+
+    if backend == "llm" and not redact:
+        console.print(
+            "[yellow]Redaction is off — full document text, including national "
+            "IDs and phone numbers, will be sent to the API.[/yellow]"
+        )
 
     with console.status(f"Classifying {len(docs)} document(s) via {clf.name}..."):
         predictions = clf.classify_many(docs)
@@ -231,6 +241,12 @@ def classify(
     held = sum(1 for p in predictions if p.needs_review)
     console.print(f"[green]Wrote {len(predictions)} predictions[/green] to {out}")
     console.print(f"held for review: {held} / {len(predictions)}")
+
+    counts = getattr(clf, "redaction_counts", {})
+    if counts:
+        from .privacy import summarize
+
+        console.print(f"redacted before sending: {summarize(counts)}")
 
 
 @app.command("train-baseline")
