@@ -173,10 +173,21 @@ accuracy over the *auto-routed* subset alongside overall accuracy, plus how
 many held documents would have been right anyway — that pair is what you tune
 the threshold against.
 
-**OCR defaults to Claude vision, not Tesseract.** No external binaries (a real
-constraint on Windows), and it handles Arabic ligatures and handwriting
-considerably better. Tesseract is available via `pip install '.[tesseract]'`
-if you need OCR to stay local.
+**Nothing leaves the network by default.** The default backend is `local` —
+a self-hosted OpenAI-compatible gateway (LiteLLM, vLLM, LM Studio, or Ollama's
+`/v1`) — and the default OCR is the same gateway's vision model. The Claude
+paths still exist behind `--backend llm` / `--ocr claude`, but choosing one
+prints exactly what leaves: document text for classification, and page images
+for OCR, which redaction cannot protect because masking works on text.
+
+**Structured output is negotiated against the gateway, not assumed.** The
+Claude API can enforce a JSON schema; an arbitrary gateway may not. So the
+local backend tries `json_schema`, falls back to `json_object`, then to a
+prompt-described shape, keeps whichever worked, and records the weaker ones in
+the backend name so a run without enforcement is never mistaken for one with
+it. Either way `institution_id` is validated against the taxonomy on our side,
+so a model that invents a destination fails loudly rather than routing a
+document somewhere that does not exist.
 
 ## Mock data
 

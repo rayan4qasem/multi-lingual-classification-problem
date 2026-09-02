@@ -84,7 +84,7 @@ def test_only_the_llm_backend_implements_the_batch_protocol():
 
 
 def test_registry_lists_the_bundled_backends():
-    assert set(available_backends()) == {"llm", "baseline"}
+    assert set(available_backends()) == {"llm", "baseline", "local"}
 
 
 def test_unknown_backend_raises_a_typed_error():

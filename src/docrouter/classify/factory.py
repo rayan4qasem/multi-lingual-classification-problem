@@ -19,6 +19,7 @@ from ..protocols import Classifier
 from ..taxonomy import Taxonomy
 from .baseline import BaselineClassifier
 from .llm import LLMClassifier
+from .openai_compat import OpenAICompatClassifier
 
 DEFAULT_BASELINE_PATH = Path("models") / "baseline.joblib"
 
@@ -88,7 +89,27 @@ def _build_baseline(
     return BaselineClassifier(taxonomy=taxonomy, review_threshold=review_threshold).load(path)
 
 
+def _build_local(
+    taxonomy: Taxonomy | None = None,
+    review_threshold: float = 0.55,
+    examples=None,
+    redact_pii: bool = True,
+    local_model: str | None = None,
+    base_url: str | None = None,
+    **_ignored,
+) -> Classifier:
+    return OpenAICompatClassifier(
+        taxonomy=taxonomy,
+        model=local_model,
+        review_threshold=review_threshold,
+        examples=examples,
+        redact_pii=redact_pii,
+        base_url=base_url,
+    )
+
+
 REGISTRY = ClassifierRegistry()
+REGISTRY.register("local", _build_local)
 REGISTRY.register("llm", _build_llm)
 REGISTRY.register("baseline", _build_baseline)
 

@@ -37,9 +37,11 @@ app = typer.Typer(add_completion=False, help="Arabic government document routing
 batch_app = typer.Typer(help="Bulk routing through the Batches API (50% cost).")
 label_app = typer.Typer(help="Human-in-the-loop labeling of real documents.")
 prompt_app = typer.Typer(help="Few-shot examples built from confirmed labels.")
+local_app = typer.Typer(help="The self-hosted model gateway.")
 app.add_typer(batch_app, name="batch")
 app.add_typer(label_app, name="label")
 app.add_typer(prompt_app, name="prompt")
+app.add_typer(local_app, name="local")
 
 # Honour a .env file next to the project. The error below tells people to
 # create one, so it has to actually take effect - it previously did not.
@@ -50,6 +52,25 @@ console = Console()
 DATA = Path("data")
 RUNS = Path("runs")
 MODELS = Path("models")
+
+
+def _warn_if_leaving_network(backend: str | None = None, ocr: str | None = None) -> None:
+    """Say plainly when a chosen option sends documents off the network.
+
+    The deployment policy is local-only, so the cloud paths remain available
+    but must never be reached by default or by accident.
+    """
+    leaving = []
+    if backend == "llm":
+        leaving.append("document text (classification)")
+    if ocr == "claude":
+        leaving.append("page images (OCR) — these cannot be redacted")
+    if leaving:
+        console.print(
+            "[yellow]Leaving the network:[/yellow] "
+            + "; ".join(leaving)
+            + ". Use --backend local / --ocr local to keep everything on the network."
+        )
 
 
 def _require_key() -> None:
@@ -64,7 +85,9 @@ def _require_key() -> None:
 
 
 def _make_classifier(backend: str, **kwargs) -> Classifier:
-    """Build a classifier by name, turning registry errors into clean exits."""
+    """Build a classifier by name, turning setup errors into clean exits."""
+    from .classify.openai_compat import GatewayError
+
     try:
         return create_classifier(backend, **kwargs)
     except UnknownBackend:
@@ -72,7 +95,7 @@ def _make_classifier(backend: str, **kwargs) -> Classifier:
             f"[red]Unknown backend {backend!r}.[/red] Available: {', '.join(available_backends())}"
         )
         raise typer.Exit(1) from None
-    except MissingModel as exc:
+    except (MissingModel, GatewayError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(1) from None
 
@@ -94,7 +117,7 @@ def _make_batch_classifier(backend: str = "llm", **kwargs) -> BatchClassifier:
     return clf
 
 
-def _load_documents(path: Path, ocr: str = "claude") -> list[Document]:
+def _load_documents(path: Path, ocr: str = "local") -> list[Document]:
     """Ingest a .jsonl dataset, a folder, or a single file.
 
     Single place where ingestion failures become CLI errors, so an
@@ -173,15 +196,20 @@ def generate(
 @app.command()
 def classify(
     path: Path = typer.Argument(..., help="a file, a folder, or a .jsonl dataset"),
-    backend: str = typer.Option("llm", help="llm or baseline"),
+    backend: str = typer.Option(
+        "local", help="local (self-hosted gateway) | baseline (offline) | llm (Claude API)"
+    ),
     model: str = typer.Option(None, help="override the Claude model"),
     effort: str = typer.Option(None, help="low | medium | high | xhigh | max"),
     threshold: float = typer.Option(0.55, help="below this, hold for human review"),
-    ocr: str = typer.Option("claude", help="OCR backend for scanned input: claude or tesseract"),
+    ocr: str = typer.Option(
+        "local", help="OCR: local (gateway vision) | tesseract (this machine) | claude (cloud)"
+    ),
     examples: Path = typer.Option(None, help="few-shot example set from `prompt build`"),
     model_path: Path = typer.Option(
         MODELS / "baseline.joblib", help="trained artifact; baseline backend only"
     ),
+    local_model: str = typer.Option(None, help="Ollama model name; ollama backend only"),
     redact: bool = typer.Option(
         True, help="mask IDs, phones, IBANs, tax numbers and emails before sending"
     ),
@@ -191,6 +219,7 @@ def classify(
     """Route documents to institutions."""
     tax = load_taxonomy()
 
+    _warn_if_leaving_network(backend, ocr)
     if backend == "llm":
         _require_key()
     docs = _load_documents(path, ocr)
@@ -229,6 +258,7 @@ def classify(
         examples=example_set,
         model_path=model_path,
         redact_pii=redact,
+        local_model=local_model,
     )
 
     if backend == "llm" and not redact:
@@ -511,14 +541,14 @@ QUEUE = DATA / "labels" / "queue.jsonl"
 def label_prelabel(
     path: Path = typer.Argument(..., help="folder of real documents, or a .jsonl dataset"),
     backend: str = typer.Option(
-        "llm", help="llm | baseline | none (build a queue with no predictions)"
+        "local", help="local | baseline | llm | none (queue with no predictions)"
     ),
     size: int = typer.Option(50, help="documents in the review batch"),
     random_ratio: float = typer.Option(
         0.2, help="share drawn uniformly at random — keep above 0 for an honest estimate"
     ),
     per_class_cap: int = typer.Option(0, help="max per predicted class (0 = uncapped)"),
-    ocr: str = typer.Option("claude", help="OCR backend for scanned input"),
+    ocr: str = typer.Option("local", help="OCR: local | tesseract | claude"),
     model_path: Path = typer.Option(
         MODELS / "baseline.joblib", help="trained artifact; baseline backend only"
     ),
@@ -681,7 +711,7 @@ def label_export(
     source: Path = typer.Argument(..., help="folder or .jsonl the documents were ingested from"),
     labels: Path = typer.Option(LABELS),
     out: Path = typer.Option(DATA / "gold" / "gold.jsonl"),
-    ocr: str = typer.Option("claude"),
+    ocr: str = typer.Option("local"),
 ) -> None:
     """Write a gold dataset that `evaluate` and `train-baseline` can consume."""
     from .labeling.store import LabelStore
@@ -723,7 +753,7 @@ def prompt_build(
     max_examples: int = typer.Option(20),
     max_chars: int = typer.Option(700, help="characters kept per example"),
     redact: bool = typer.Option(True, help="mask IDs, phones, IBANs, tax numbers, emails"),
-    ocr: str = typer.Option("claude"),
+    ocr: str = typer.Option("local"),
     out: Path = typer.Option(EXAMPLES),
 ) -> None:
     """Select few-shot examples from confirmed labels."""
@@ -842,6 +872,71 @@ def prompt_show(
     elif block:
         console.print("")
         console.print(block[:1200] + ("\n…" if len(block) > 1200 else ""))
+
+
+@local_app.command("check")
+def local_check(
+    local_model: str = typer.Option(None, help="model id; defaults to COMPANY_LLM_MODEL"),
+    base_url: str = typer.Option(None, help="gateway URL; defaults to COMPANY_API_URL"),
+) -> None:
+    """Verify the self-hosted gateway is reachable and enforces the schema."""
+    from .classify.openai_compat import GatewayError, OpenAICompatClassifier
+    from .models import Document
+
+    try:
+        clf = OpenAICompatClassifier(taxonomy=load_taxonomy(), model=local_model, base_url=base_url)
+    except GatewayError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from None
+
+    report = clf.preflight()
+    console.print(f"gateway : {report['url']}")
+    console.print(f"model   : {report['model']}")
+
+    if not report.get("reachable"):
+        console.print(f"[red]unreachable[/red] — {report.get('error', '')}")
+        console.print(
+            "\nIf it sits on a private network, connect to that network first "
+            "(e.g. Tailscale), then re-run."
+        )
+        raise typer.Exit(1)
+
+    console.print("[green]reachable[/green]")
+    models = report.get("available_models") or []
+    if models:
+        console.print("served  : " + ", ".join(models[:12]))
+    if not report.get("model_present"):
+        console.print(f"[yellow]{report['model']!r} is not in the served list.[/yellow]")
+
+    # The capability that matters is not advertised anywhere, so it is probed.
+    console.print("\nnegotiating structured output...")
+    probe = Document(
+        doc_id="probe",
+        text="أفيدكم بأنني تعرضت لسرقة مركبتي وأرغب في تقديم بلاغ رسمي وضبط الجاني.",
+    )
+    try:
+        prediction = clf.classify(probe)
+    except Exception as exc:
+        console.print(f"[red]failed:[/red] {exc}")
+        raise typer.Exit(1) from None
+
+    tax = load_taxonomy()
+    strength = {
+        "json_schema": "[green]json_schema[/green] — the server enforces the enum",
+        "json_object": "[yellow]json_object[/yellow] — valid JSON, shape not enforced",
+        "prompt": "[yellow]prompt only[/yellow] — no server-side guarantee",
+    }
+    console.print("strategy: " + strength.get(clf.strategy or "", str(clf.strategy)))
+    if clf.strategy != "json_schema":
+        console.print(
+            "  [dim]Institution ids are still validated against the taxonomy, so an "
+            "invented destination fails loudly rather than routing anywhere.[/dim]"
+        )
+    console.print(
+        f"result  : {tax.name_ar(prediction.institution_id)} "
+        f"({prediction.institution_id}) at confidence {prediction.confidence:.2f}"
+    )
+    console.print("\nReady. Run: [cyan]docrouter classify <path> --backend local[/cyan]")
 
 
 if __name__ == "__main__":

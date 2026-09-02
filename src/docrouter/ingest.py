@@ -168,6 +168,71 @@ class TesseractOcr:
         )
 
 
+class GatewayVisionOcr:
+    """Transcribe page images with the self-hosted gateway.
+
+    Exists because `ClaudeVisionOcr` uploads page images off the network, and
+    redaction cannot help there — masking works on text. For a local-only
+    deployment this is the only way a scanned document gets read without
+    installing Tesseract.
+
+    Requires the gateway to serve a multimodal model. A text-only model (such
+    as a plain `gpt-oss`) will fail here, which is why the failure names
+    `--ocr tesseract` as the alternative rather than returning empty text.
+    """
+
+    def __init__(self, model: str | None = None, client=None, base_url: str | None = None):
+
+        self._model = model
+        self._client = client
+        self._base_url = base_url
+
+    @property
+    def name(self) -> str:
+        return "local"
+
+    def _ensure(self):
+        from .classify.openai_compat import OpenAICompatClient, _env
+
+        if self._client is None:
+            self._client = OpenAICompatClient(base_url=self._base_url)
+        if self._model is None:
+            self._model = (
+                _env("DOCROUTER_LOCAL_VISION_MODEL", "DOCROUTER_LOCAL_MODEL", "COMPANY_LLM_MODEL")
+                or "gpt-oss"
+            )
+        return self._client, self._model
+
+    def transcribe(self, images: Sequence[bytes]) -> str:
+        if not images:
+            return ""
+        from .classify.openai_compat import GatewayError
+
+        client, model = self._ensure()
+        content: list[dict] = [
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": "data:image/png;base64,"
+                    + base64.standard_b64encode(image).decode("ascii")
+                },
+            }
+            for image in images
+        ]
+        content.append({"type": "text", "text": OCR_INSTRUCTION})
+        try:
+            return client.chat(
+                model=model,
+                messages=[{"role": "user", "content": content}],
+                max_tokens=4000,
+            )
+        except GatewayError as exc:
+            raise OCRUnavailable(
+                f"local OCR with {model} failed: {exc}. The gateway may not serve a "
+                "multimodal model — use --ocr tesseract to transcribe on this machine."
+            ) from exc
+
+
 class OcrRegistry:
     """Name -> OCR backend factory."""
 
@@ -192,6 +257,7 @@ class OcrRegistry:
 
 
 OCR_REGISTRY = OcrRegistry()
+OCR_REGISTRY.register("local", GatewayVisionOcr)
 OCR_REGISTRY.register("claude", ClaudeVisionOcr)
 OCR_REGISTRY.register(
     "tesseract", lambda **kw: TesseractOcr(**{k: v for k, v in kw.items() if k == "lang"})
@@ -200,7 +266,7 @@ OCR_REGISTRY.register(
 
 def resolve_ocr(backend: OcrBackend | str | None, client=None) -> OcrBackend | None:
     """Accept a backend instance, a registered name, or None."""
-    if backend is None or isinstance(backend, (ClaudeVisionOcr, TesseractOcr)):
+    if backend is None or isinstance(backend, (ClaudeVisionOcr, TesseractOcr, GatewayVisionOcr)):
         return backend
     if isinstance(backend, str):
         if backend == "claude":
@@ -388,7 +454,7 @@ def run_ocr(images: Sequence[bytes], backend: OcrBackend | str = "claude", clien
 
 def load_document(
     path: str | Path,
-    ocr_backend: OcrBackend | str | None = "claude",
+    ocr_backend: OcrBackend | str | None = "local",
     client=None,
     registry: ExtractorRegistry | None = None,
 ) -> Document:
@@ -415,7 +481,7 @@ def load_document(
 
 def load_directory(
     directory: str | Path,
-    ocr_backend: OcrBackend | str | None = "claude",
+    ocr_backend: OcrBackend | str | None = "local",
     client=None,
     registry: ExtractorRegistry | None = None,
 ) -> list[Document]:

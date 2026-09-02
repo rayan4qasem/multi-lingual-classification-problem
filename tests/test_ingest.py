@@ -131,6 +131,7 @@ def test_empty_registry_supports_nothing():
 def test_ocr_registry_creates_known_backends():
     assert ingest.OCR_REGISTRY.create("tesseract").name == "tesseract"
     assert ingest.OCR_REGISTRY.create("claude", client=object()).name == "claude"
+    assert ingest.OCR_REGISTRY.create("local", client=object()).name == "local"
 
 
 def test_ocr_registry_rejects_unknown_names():
@@ -381,3 +382,48 @@ def test_missing_files_raise_filenotfound_for_every_format(tmp_path, name):
     escape as a traceback while a missing .txt reported cleanly."""
     with pytest.raises(FileNotFoundError, match="no such file"):
         ingest.load_document(tmp_path / name, ocr_backend=None)
+
+
+# ---------- the gateway vision backend ----------
+
+
+def test_gateway_ocr_sends_images_as_data_urls():
+    """The local-only OCR path: page images go to the self-hosted gateway,
+    not off the network."""
+
+    class Recorder:
+        def __init__(self):
+            self.sent = None
+
+        def chat(self, model, messages, **kw):
+            self.sent = messages
+            return "نص مستخرج"
+
+    client = Recorder()
+    backend = ingest.GatewayVisionOcr(model="vision-model", client=client)
+    assert backend.transcribe([b"page-one", b"page-two"]) == "نص مستخرج"
+
+    content = client.sent[0]["content"]
+    images = [c for c in content if c["type"] == "image_url"]
+    assert len(images) == 2
+    assert images[0]["image_url"]["url"].startswith("data:image/png;base64,")
+    assert content[-1]["type"] == "text" and "انسخ" in content[-1]["text"]
+
+
+def test_gateway_ocr_short_circuits_on_no_images():
+    class Never:
+        def chat(self, *a, **kw):
+            raise AssertionError("should not be called")
+
+    assert ingest.GatewayVisionOcr(client=Never()).transcribe([]) == ""
+
+
+def test_a_text_only_model_fails_naming_the_local_alternative():
+    from docrouter.classify.openai_compat import GatewayError
+
+    class TextOnly:
+        def chat(self, *a, **kw):
+            raise GatewayError("/chat/completions returned 400: model does not support images")
+
+    with pytest.raises(OCRUnavailable, match="tesseract"):
+        ingest.GatewayVisionOcr(model="gpt-oss", client=TextOnly()).transcribe([b"x"])
