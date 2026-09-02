@@ -82,6 +82,7 @@ Prediction                 institution_id · confidence · rationale_ar · alter
 | `mockdata.py` | Dataset engines — curated, template and LLM. |
 | `evaluate.py` | Scoring, with auto-routed vs held-for-review separated. |
 | `threshold.py` | Cut-off sweep, calibration check, held-out validation. |
+| `fewshot.py` | Gold labels → cached few-shot examples, with redaction. |
 | `labeling/store.py` | Append-only label store. Decisions only, no text. |
 | `labeling/prioritize.py` | Builds the review batch: priority lane + random lane. |
 | `labeling/review.py` | Local, loopback-only review UI (RTL, keyboard-driven). |
@@ -155,6 +156,69 @@ the taxonomy (prosecution vs. police 3, labour vs. GOSI 2, tax vs. commerce
 ```bash
 docrouter generate --engine curated --hard-only --out data/generated/hard.jsonl
 ```
+
+## Feeding confirmed labels back into the prompt
+
+Once a gold set exists, it becomes few-shot examples:
+
+```bash
+docrouter prompt build ./incoming --predictions runs/predictions.jsonl
+```
+
+```bash
+docrouter prompt show --count-tokens
+```
+
+```bash
+docrouter classify ./new-batch --examples data/prompt/examples.json
+```
+
+**Selection favours corrections, not confirmations.** A document the model
+already got right teaches it little; a document a reviewer *overrode* teaches
+a boundary it got wrong. Coverage comes first — every institution with gold
+gets at least one example — then the remaining budget goes to overrides,
+which is exactly where the prosecution-vs-police and labour-vs-GOSI calls
+live. Built from the curated corpus, 16 of 18 selected examples are
+corrections, and each one names the mistake in the prompt:
+
+> `### مثال 7 ← mci_commerce (وزارة التجارة)`
+> `تنبيه: صُنّفت خطأً على أنها zatca (هيئة الزكاة والضريبة والجمارك)، والصواب ما هو مثبت أعلاه.`
+
+**Examples are fixed, not retrieved per document.** Nearest-neighbour
+retrieval would pick better examples for any single document, but it changes
+the prompt prefix on every call — which invalidates the server-side cache and
+multiplies the per-document cost. At 14 classes a fixed set captures most of
+the benefit and keeps the prefix byte-stable. Selection is sorted, never
+shuffled, and a test asserts the rendered block is byte-identical across runs.
+The examples join the same single cached block as the taxonomy, so they are
+paid for once per cache window rather than once per document.
+
+**Redaction is on by default.** Examples embed real document text and are sent
+on every request, which is a meaningful escalation over sending one document
+at a time. National IDs, phone numbers, IBANs, tax numbers and emails are
+replaced with typed placeholders; dates and amounts survive because they carry
+routing signal. `--no-redact` turns it off and warns.
+
+**Leakage guard.** `classify --examples` warns when a document appears both in
+the example set and in the run being scored — a model evaluated on documents
+sitting in its own prompt looks better than it is.
+
+### Does it actually help?
+
+Unmeasured. The wiring is tested; the benefit is not. Establish it with an
+A/B on documents *not* in the example set:
+
+```bash
+docrouter classify data/holdout.jsonl --backend llm --out runs/base.jsonl
+```
+
+```bash
+docrouter classify data/holdout.jsonl --backend llm --examples data/prompt/examples.json --out runs/shot.jsonl
+```
+
+Then `docrouter evaluate` each. Few-shot examples are not automatically an
+improvement — they can bias the model toward the classes they over-represent.
+Treat the A/B as the deciding evidence, not the assumption.
 
 ## Choosing the threshold
 

@@ -29,8 +29,10 @@ from .taxonomy import load as load_taxonomy
 app = typer.Typer(add_completion=False, help="Arabic government document routing.")
 batch_app = typer.Typer(help="Bulk routing through the Batches API (50% cost).")
 label_app = typer.Typer(help="Human-in-the-loop labeling of real documents.")
+prompt_app = typer.Typer(help="Few-shot examples built from confirmed labels.")
 app.add_typer(batch_app, name="batch")
 app.add_typer(label_app, name="label")
+app.add_typer(prompt_app, name="prompt")
 
 console = Console()
 
@@ -126,6 +128,7 @@ def classify(
     effort: str = typer.Option(None, help="low | medium | high | xhigh | max"),
     threshold: float = typer.Option(0.55, help="below this, hold for human review"),
     ocr: str = typer.Option("claude", help="OCR backend for scanned input: claude or tesseract"),
+    examples: Path = typer.Option(None, help="few-shot example set from `prompt build`"),
     limit: int = typer.Option(0, help="stop after N documents (0 = all)"),
     out: Path = typer.Option(RUNS / "predictions.jsonl"),
 ) -> None:
@@ -151,8 +154,26 @@ def classify(
 
     if backend == "llm":
         _require_key()
+        example_set = None
+        if examples:
+            from . import fewshot
+
+            example_set = fewshot.load(examples)
+            leaked = fewshot.check_leakage(example_set, docs)
+            if leaked:
+                # Scoring a model on documents sitting in its own prompt
+                # inflates the result, so this is an error worth shouting about.
+                console.print(
+                    f"[yellow]{len(leaked)} document(s) are in both the example "
+                    "set and this run — their scores are not meaningful. "
+                    "Exclude them before quoting any accuracy.[/yellow]"
+                )
+            console.print(
+                f"using {len(example_set.examples)} few-shot example(s) from {examples}"
+            )
         clf = LLMClassifier(
-            taxonomy=tax, model=model, effort=effort, review_threshold=threshold
+            taxonomy=tax, model=model, effort=effort,
+            review_threshold=threshold, examples=example_set,
         )
     elif backend == "baseline":
         model_path = MODELS / "baseline.joblib"
@@ -701,6 +722,154 @@ def label_export(
             f"[yellow]{len(missing)} label(s) had no matching document in {source}[/yellow]"
         )
     console.print(f"evaluate against it with: docrouter evaluate --dataset {out}")
+
+
+EXAMPLES = DATA / "prompt" / "examples.json"
+
+
+@prompt_app.command("build")
+def prompt_build(
+    source: Path = typer.Argument(..., help="folder or .jsonl the labeled documents live in"),
+    labels: Path = typer.Option(LABELS, help="label store; omit to use dataset labels"),
+    predictions: Path = typer.Option(
+        None, help="model predictions, so human overrides can be preferred"
+    ),
+    per_class: int = typer.Option(1, help="guaranteed examples per institution"),
+    max_examples: int = typer.Option(20),
+    max_chars: int = typer.Option(700, help="characters kept per example"),
+    redact: bool = typer.Option(True, help="mask IDs, phones, IBANs, tax numbers, emails"),
+    ocr: str = typer.Option("claude"),
+    out: Path = typer.Option(EXAMPLES),
+) -> None:
+    """Select few-shot examples from confirmed labels."""
+    from . import fewshot
+    from .models import Prediction
+
+    tax = load_taxonomy()
+
+    if source.suffix == ".jsonl":
+        docs = mockdata.load_jsonl(source)
+    else:
+        docs = ingest.load_directory(source, ocr_backend=ocr)
+
+    gold: dict[str, str] = {}
+    if labels.exists():
+        from .labeling.store import LabelStore
+
+        gold = LabelStore(labels).gold()
+    if not gold:
+        gold = {d.doc_id: d.true_label for d in docs if d.true_label}
+        console.print(
+            f"[yellow]No label store at {labels}; using the dataset's own labels.[/yellow]"
+        )
+    if not gold:
+        console.print("[red]No confirmed labels to build examples from.[/red]")
+        raise typer.Exit(1)
+
+    model_labels: dict[str, str] = {}
+    if predictions and predictions.exists():
+        with predictions.open(encoding="utf-8") as fh:
+            model_labels = {
+                p.doc_id: p.institution_id
+                for p in (Prediction.model_validate_json(l) for l in fh if l.strip())
+            }
+
+    example_set = fewshot.select_examples(
+        docs, gold, model_labels=model_labels, taxonomy=tax,
+        per_class=per_class, max_examples=max_examples,
+        max_chars=max_chars, do_redact=redact,
+    )
+    fewshot.save(example_set, out)
+
+    overrides = sum(1 for e in example_set.examples if e.is_override)
+    covered = len(example_set.per_class())
+    console.print(
+        f"[green]Selected {len(example_set.examples)} example(s)[/green] to {out}"
+    )
+    console.print(
+        f"  covering {covered}/{len(tax.ids)} institutions; "
+        f"{overrides} are human corrections"
+    )
+    if not redact:
+        console.print(
+            "[yellow]Redaction is off — real identifiers will be sent on every "
+            "request. Only do this if policy allows it.[/yellow]"
+        )
+    missing = [i for i in tax.ids if i not in example_set.per_class()]
+    if missing:
+        console.print(f"  [yellow]no example yet for:[/yellow] {', '.join(missing)}")
+    console.print(f"inspect with: docrouter prompt show")
+
+
+@prompt_app.command("show")
+def prompt_show(
+    examples: Path = typer.Option(EXAMPLES),
+    full: bool = typer.Option(False, help="print the whole system prompt"),
+    count_tokens: bool = typer.Option(False, help="ask the API for an exact token count"),
+) -> None:
+    """Inspect the example set and what it costs in prompt tokens."""
+    from . import fewshot
+    from .classify.llm import SYSTEM_PREAMBLE
+
+    tax = load_taxonomy()
+    if not examples.exists():
+        console.print(f"[red]No example set at {examples}.[/red] Run `docrouter prompt build`.")
+        raise typer.Exit(1)
+
+    example_set = fewshot.load(examples)
+    base = SYSTEM_PREAMBLE + tax.render_for_prompt()
+    block = fewshot.render(example_set, tax)
+
+    table = Table(title=f"Few-shot examples ({len(example_set.examples)})")
+    table.add_column("doc", style="cyan", no_wrap=True)
+    table.add_column("الجهة", justify="right")
+    table.add_column("chars", justify="right")
+    table.add_column("")
+    for e in example_set.examples:
+        flags = []
+        if e.is_override:
+            flags.append(f"[yellow]صُحح من {e.corrected_from}[/yellow]")
+        if e.truncated:
+            flags.append("[dim]مقتطع[/dim]")
+        table.add_row(e.doc_id, tax.name_ar(e.label), str(len(e.text)), " ".join(flags))
+    console.print(table)
+
+    console.print(f"base prompt    : {len(base):,} chars")
+    console.print(f"examples block : {len(block):,} chars (+{len(block)/max(len(base),1):.0%})")
+
+    if count_tokens:
+        _require_key()
+        import anthropic
+
+        client = anthropic.Anthropic()
+        probe = [{"role": "user", "content": "x"}]
+        without = client.messages.count_tokens(
+            model=os.environ.get("DOCROUTER_MODEL", "claude-opus-5"),
+            system=base, messages=probe,
+        ).input_tokens
+        with_examples = client.messages.count_tokens(
+            model=os.environ.get("DOCROUTER_MODEL", "claude-opus-5"),
+            system=base + block, messages=probe,
+        ).input_tokens
+        console.print(
+            f"tokens         : {without:,} -> {with_examples:,} "
+            f"(+{with_examples - without:,})"
+        )
+        console.print(
+            "[dim]Cached after the first call, so this is paid once per cache "
+            "window, not per document.[/dim]"
+        )
+    else:
+        console.print(
+            "[dim]Pass --count-tokens for an exact count (needs an API key).[/dim]"
+        )
+
+    if full:
+        console.print("")
+        console.print(base + block)
+    elif block:
+        console.print("")
+        console.print(block[:1200] + ("\n…" if len(block) > 1200 else ""))
 
 
 if __name__ == "__main__":

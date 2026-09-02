@@ -22,6 +22,7 @@ from anthropic.types.message_create_params import MessageCreateParamsNonStreamin
 from anthropic.types.messages.batch_create_params import Request
 
 from .. import DEFAULT_MODEL
+from ..fewshot import ExampleSet, render as render_examples
 from ..models import Alternative, Document, LLMClassification, Prediction
 from ..taxonomy import Taxonomy, load as load_taxonomy
 
@@ -119,6 +120,7 @@ class LLMClassifier:
         effort: str | None = None,
         review_threshold: float = 0.55,
         client: anthropic.Anthropic | None = None,
+        examples: "ExampleSet | None" = None,
     ):
         self.taxonomy = taxonomy or load_taxonomy()
         self.model = model or os.environ.get("DOCROUTER_MODEL", DEFAULT_MODEL)
@@ -126,11 +128,18 @@ class LLMClassifier:
         self.review_threshold = review_threshold
         self.client = client or anthropic.Anthropic()
         self.schema = build_schema(self.taxonomy)
-        self._system = SYSTEM_PREAMBLE + self.taxonomy.render_for_prompt()
+        self.examples = examples
+
+        # Examples join the cached prefix rather than the per-document turn.
+        # They are rendered in sorted order and carry no timestamps, so the
+        # prefix stays byte-stable and keeps hitting the cache.
+        block = render_examples(examples, self.taxonomy) if examples else ""
+        self._system = SYSTEM_PREAMBLE + self.taxonomy.render_for_prompt() + block
 
     @property
     def name(self) -> str:
-        return f"llm:{self.model}"
+        n = len(self.examples.examples) if self.examples else 0
+        return f"llm:{self.model}+{n}shot" if n else f"llm:{self.model}"
 
     def _system_blocks(self) -> list[dict]:
         # One block, one breakpoint: the whole prompt is stable across

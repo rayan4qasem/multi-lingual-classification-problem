@@ -17,3 +17,7 @@ build/
 # and is safe to commit if your policy allows it.
 data/labels/queue*.jsonl
 data/gold/
+
+# Few-shot example sets embed (redacted) document text and are sent to the
+# API on every request. Built locally from your own gold labels; not shared.
+data/prompt/
