@@ -22,6 +22,8 @@ dependencies = [
 
 [project.optional-dependencies]
 tesseract = ["pytesseract>=0.3.10"]
+# Only for building shaped-Arabic test images; not needed at runtime.
+arabic-test = ["arabic-reshaper>=3.0", "python-bidi>=0.6"]
 dev = [
     "pytest>=8.2",
     "pytest-cov>=5.0",

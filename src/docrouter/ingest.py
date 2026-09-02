@@ -140,11 +140,36 @@ class ClaudeVisionOcr:
         return "".join(b.text for b in response.content if b.type == "text")
 
 
-class TesseractOcr:
-    """Local alternative for material that must not leave the network."""
+# Windows installers do not put tesseract.exe on PATH, so look where they
+# actually put it before giving up.
+TESSERACT_CANDIDATES = (
+    r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+    r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+    "/usr/bin/tesseract",
+    "/usr/local/bin/tesseract",
+    "/opt/homebrew/bin/tesseract",
+)
 
-    def __init__(self, lang: str = "ara+eng"):
+
+def find_tesseract() -> str | None:
+    """Locate the tesseract binary: explicit override, PATH, then known paths."""
+    import shutil
+
+    override = os.environ.get("TESSERACT_CMD")
+    if override and Path(override).exists():
+        return override
+    found = shutil.which("tesseract")
+    if found:
+        return found
+    return next((c for c in TESSERACT_CANDIDATES if Path(c).exists()), None)
+
+
+class TesseractOcr:
+    """Transcribes on this machine. The only OCR path that needs no server."""
+
+    def __init__(self, lang: str = "ara+eng", cmd: str | None = None):
         self.lang = lang
+        self._cmd = cmd
 
     @property
     def name(self) -> str:
@@ -162,10 +187,24 @@ class TesseractOcr:
                 "plus the Tesseract binary with the `ara` language pack"
             ) from exc
 
-        return "\n\n".join(
-            pytesseract.image_to_string(Image.open(io.BytesIO(image)), lang=self.lang)
-            for image in images
-        )
+        cmd = self._cmd or find_tesseract()
+        if cmd is None:
+            raise OCRUnavailable(
+                "tesseract.exe not found. Install it, add it to PATH, or set "
+                "TESSERACT_CMD to its full path."
+            )
+        pytesseract.pytesseract.tesseract_cmd = cmd
+
+        try:
+            return "\n\n".join(
+                pytesseract.image_to_string(Image.open(io.BytesIO(image)), lang=self.lang)
+                for image in images
+            )
+        except pytesseract.TesseractError as exc:
+            raise OCRUnavailable(
+                f"tesseract failed ({exc}). If it mentions a missing language, "
+                "install ara.traineddata or set TESSDATA_PREFIX to a folder holding it."
+            ) from exc
 
 
 class GatewayVisionOcr:

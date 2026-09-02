@@ -427,3 +427,32 @@ def test_a_text_only_model_fails_naming_the_local_alternative():
 
     with pytest.raises(OCRUnavailable, match="tesseract"):
         ingest.GatewayVisionOcr(model="gpt-oss", client=TextOnly()).transcribe([b"x"])
+
+
+# ---------- tesseract discovery ----------
+
+
+def test_tesseract_is_found_without_being_on_path(monkeypatch, tmp_path):
+    """Windows installers do not add tesseract.exe to PATH, so discovery has
+    to look in the standard install locations too."""
+    monkeypatch.delenv("TESSERACT_CMD", raising=False)
+    fake = tmp_path / "tesseract.exe"
+    fake.write_bytes(b"")
+    monkeypatch.setattr(ingest, "TESSERACT_CANDIDATES", (str(fake),))
+    monkeypatch.setattr("shutil.which", lambda _n: None)
+    assert ingest.find_tesseract() == str(fake)
+
+
+def test_an_explicit_override_wins(monkeypatch, tmp_path):
+    override = tmp_path / "custom-tesseract.exe"
+    override.write_bytes(b"")
+    monkeypatch.setenv("TESSERACT_CMD", str(override))
+    assert ingest.find_tesseract() == str(override)
+
+
+def test_missing_binary_is_a_typed_error(monkeypatch):
+    monkeypatch.delenv("TESSERACT_CMD", raising=False)
+    monkeypatch.setattr(ingest, "TESSERACT_CANDIDATES", ())
+    monkeypatch.setattr("shutil.which", lambda _n: None)
+    with pytest.raises(OCRUnavailable, match="TESSERACT_CMD"):
+        ingest.TesseractOcr().transcribe([b"page"])

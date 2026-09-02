@@ -123,6 +123,25 @@ object exists until a document actually needs transcribing.
 takes domain objects and returns Rich tables — no I/O, no `sys.exit`, no Typer.
 That is why the tables are unit-tested without invoking a command.
 
+### Local OCR (Tesseract)
+
+Needed for scanned documents when the gateway serves a text-only model. The
+binary is found automatically in the standard Windows install locations, so it
+does not have to be on `PATH`; `TESSERACT_CMD` overrides.
+
+```bash
+winget install --id UB-Mannheim.TesseractOCR
+```
+
+The installer ships English only. Arabic has to be added — `ara.traineddata`
+from `tessdata_best` into the `tessdata` folder, or anywhere and point
+`TESSDATA_PREFIX` at it (which is what you need if you cannot write to
+Program Files).
+
+Verified on this machine at **100% word accuracy** on cleanly rendered Arabic
+(29/29 words). That is a ceiling, not a forecast: real scans of stamped,
+faxed, skewed paper will be materially worse, and that number is still unknown.
+
 ## Development
 
 ```bash
