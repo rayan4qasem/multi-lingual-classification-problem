@@ -1,0 +1,346 @@
+<title>docrouter Evaluation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+:root{
+  --paper:#f8faf9; --card:#ffffff; --ink:#14201c; --muted:#5d6b66;
+  --faint:#8b9691; --rule:#dbe4e0; --rule-strong:#c3d1cb;
+  --accent:#1f5f4e; --accent-soft:#e6f0ec;
+  --warn:#9a3412; --warn-soft:#f8ebe4;
+  --note:#8a6d1f; --note-soft:#f7f1e0;
+  --quote:#f2f6f4;
+  --f-ui:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --f-ar:"Noto Naskh Arabic","Times New Roman",serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0d1512; --card:#141d19; --ink:#e4ece8; --muted:#9aaaa4;
+  --faint:#6f807a; --rule:#243029; --rule-strong:#33443c;
+  --accent:#6fbfa5; --accent-soft:#16302a;
+  --warn:#e08b63; --warn-soft:#31201a;
+  --note:#d4b264; --note-soft:#2d2718;
+  --quote:#101a17;
+}}
+:root[data-theme="dark"]{
+  --paper:#0d1512; --card:#141d19; --ink:#e4ece8; --muted:#9aaaa4;
+  --faint:#6f807a; --rule:#243029; --rule-strong:#33443c;
+  --accent:#6fbfa5; --accent-soft:#16302a;
+  --warn:#e08b63; --warn-soft:#31201a;
+  --note:#d4b264; --note-soft:#2d2718;
+  --quote:#101a17;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--f-ui);font-size:15.5px;line-height:1.72;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:860px;margin:0 auto;padding:0 22px 90px}
+.ar{font-family:var(--f-ar);direction:rtl;unicode-bidi:isolate}
+
+header{border-bottom:2px solid var(--accent);padding:44px 0 22px;margin-bottom:34px}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--accent);font-weight:600;margin:0 0 12px}
+h1{font-size:clamp(28px,4.6vw,40px);line-height:1.25;margin:0 0 14px;
+  font-weight:700;letter-spacing:-.02em;text-wrap:balance}
+.lede{font-size:17.5px;color:var(--muted);margin:0;max-width:62ch}
+
+h2{font-size:21px;font-weight:700;margin:0 0 6px;letter-spacing:-.01em;text-wrap:balance}
+section{margin:0 0 46px}
+.sdesc{color:var(--muted);margin:0 0 20px;max-width:64ch}
+p{max-width:66ch}
+
+/* headline figures */
+.figures{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:1px;background:var(--rule);border:1px solid var(--rule);
+  border-radius:6px;overflow:hidden;margin:0 0 26px}
+.fig{background:var(--card);padding:16px 18px}
+.fig b{display:block;font-size:27px;font-weight:700;line-height:1.2;
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.fig span{display:block;font-size:12.5px;color:var(--muted);margin-top:3px}
+.fig.hero b{color:var(--accent)}
+
+table{width:100%;border-collapse:collapse;font-size:14.5px;margin:0 0 14px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule)}
+th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);font-weight:600}
+td.n{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--f-mono);font-size:13.5px}
+tr.em td{font-weight:600}
+tr.em td.n{color:var(--accent)}
+.tablewrap{overflow-x:auto;margin-bottom:8px}
+caption{caption-side:bottom;text-align:left;font-size:13px;color:var(--faint);
+  padding-top:8px}
+
+.decision{background:var(--card);border:1px solid var(--rule);
+  border-left:3px solid var(--accent);border-radius:5px;
+  padding:16px 18px;margin:0 0 13px}
+.decision h3{margin:0 0 6px;font-size:16px;font-weight:600}
+.decision p{margin:0;color:var(--muted);font-size:14.5px;max-width:none}
+.decision p+p{margin-top:8px}
+.decision .took{color:var(--ink)}
+
+.limit{background:var(--warn-soft);border:1px solid var(--rule);
+  border-left:3px solid var(--warn);border-radius:5px;padding:16px 18px;margin:0 0 13px}
+.limit h3{margin:0 0 6px;font-size:16px;font-weight:600;color:var(--warn)}
+.limit p{margin:0;font-size:14.5px;max-width:none}
+
+blockquote{font-family:var(--f-ar);direction:rtl;font-size:16px;line-height:2;
+  background:var(--quote);border-radius:5px;padding:15px 17px;margin:14px 0}
+blockquote b{color:var(--accent)}
+
+code{font-family:var(--f-mono);font-size:.88em;background:var(--accent-soft);
+  padding:1px 5px;border-radius:3px}
+ul{padding-left:20px;max-width:66ch}
+li{margin-bottom:6px}
+.foot{border-top:1px solid var(--rule);margin-top:40px;padding-top:18px;
+  font-size:13.5px;color:var(--faint)}
+a{color:var(--accent)}
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Evaluation report</p>
+  <h1>Routing Arabic government documents to the right institution</h1>
+  <p class="lede">A classifier that reads incoming Arabic correspondence and
+  decides which of 14 Saudi government bodies should handle it — with the
+  measurement methodology that says whether it can be trusted.</p>
+</header>
+
+<section>
+  <div class="figures">
+    <div class="fig hero"><b>63.6%</b><span>baseline, hardest subset</span></div>
+    <div class="fig"><b>86</b><span>authored test documents</span></div>
+    <div class="fig"><b>14</b><span>institutions</span></div>
+    <div class="fig"><b>187</b><span>tests, 85.7% covered</span></div>
+  </div>
+  <p><strong>The headline number is deliberately the unflattering one.</strong>
+  The same classifier scores 100% on an easy generator and 80.2% on the full
+  corpus. Reporting 100% would be true and worthless — it measures a model
+  against its own phrasebook. 63.6% is what it does on documents built to be
+  hard, and that is the number worth acting on.</p>
+</section>
+
+<section>
+  <h2>The constraint that shaped everything</h2>
+  <p class="sdesc">This system routes incoming citizen correspondence.
+  That data is operational and cannot be published, no public dataset carries
+  destination-institution labels, and one that did would be a breach rather
+  than a resource. So the test set was built, not borrowed.</p>
+
+  <p>86 Arabic documents across all 14 institutions, written as real
+  correspondence rather than assembled from keyword pools — 26 easy, 16
+  medium, <strong>44 hard</strong>. Sixteen of those are adversarial cases
+  placed on the exact boundaries the taxonomy declares: two per confusion
+  pair, one in each direction.</p>
+
+  <p>Here is one, labelled <strong>GOSI</strong> (social insurance), not
+  labour:</p>
+
+  <blockquote>
+    أصبت أثناء عملي لدى منشأة مقاولات… سجلت المنشأة الإصابة وانتهى العلاج
+    بتقرير طبي نهائي.<br>
+    <b>لا خلاف بيني وبين صاحب العمل على الأجر أو العقد، وما زلت على رأس
+    العمل لديه.</b><br>
+    طلبي منحصر في إحالتي إلى اللجنة الطبية لتقدير نسبة العجز وصرف التعويض.
+  </blockquote>
+
+  <p>Every surface signal says labour dispute — employer, contract, workplace
+  injury. The bolded sentence flips it: there is no dispute with the employer,
+  so this is a disability assessment, which belongs to GOSI. A keyword model
+  routes it wrongly. That is what the 63.6% is measuring.</p>
+</section>
+
+<section>
+  <h2>Results</h2>
+  <p class="sdesc">Offline TF-IDF + calibrated SVM baseline, trained on the
+  easy generator and applied to each set. Reproducible from a clean clone
+  with no API key.</p>
+
+  <div class="tablewrap">
+  <table>
+    <caption>The gap between rows 1 and 3 is the benchmark. A test asserts it
+    stays open, so the corpus cannot silently rot into a trivial one.</caption>
+    <thead><tr><th>Evaluation</th><th class="n">n</th><th class="n">Accuracy</th><th class="n">Macro F1</th></tr></thead>
+    <tbody>
+      <tr><td>Easy generator, unseen documents</td><td class="n">322</td><td class="n">100.0%</td><td class="n">1.000</td></tr>
+      <tr><td>Curated corpus, all</td><td class="n">86</td><td class="n">80.2%</td><td class="n">0.801</td></tr>
+      <tr class="em"><td>Curated corpus, hard subset</td><td class="n">44</td><td class="n">63.6%</td><td class="n">0.621</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>The errors land where the taxonomy predicted they would, which is
+  evidence the confusion pairs were declared correctly rather than guessed:
+  police ↔ prosecution <strong>3</strong>, labour ↔ GOSI <strong>3</strong>,
+  tax ↔ commerce <strong>3</strong>, municipal ↔ civil defence
+  <strong>1</strong>, civil affairs ↔ courts <strong>1</strong>.</p>
+</section>
+
+<section>
+  <h2>Why accuracy is not the metric that matters</h2>
+  <p class="sdesc">Sending a document to the wrong ministry costs far more
+  than holding it for a clerk to look at. So the system reports accuracy over
+  the documents it routed <em>automatically</em>, separately from overall
+  accuracy, and the cut-off between them is chosen by measurement.</p>
+
+  <div class="tablewrap">
+  <table>
+    <caption>Target mode: the lowest cut-off meeting a 95% accuracy bar, so
+    coverage is as high as the bar allows.</caption>
+    <thead><tr><th>Threshold</th><th class="n">Coverage</th><th class="n">Accuracy when routed</th><th class="n">Misrouted</th><th class="n">Held</th></tr></thead>
+    <tbody>
+      <tr class="em"><td>0.40 — measured</td><td class="n">57%</td><td class="n">95.9%</td><td class="n">2</td><td class="n">37</td></tr>
+      <tr><td>0.55 — the placeholder it replaced</td><td class="n">40%</td><td class="n">97.1%</td><td class="n">1</td><td class="n">52</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>The placeholder held 15 more documents to buy 1.2 points of accuracy on a
+  smaller routed set. Whether that trade is right is a business question about
+  the real cost of a misroute versus a delay — which is why it is asked
+  directly in the taxonomy review, rather than assumed in a default.</p>
+</section>
+
+<section>
+  <h2>Two guards that changed the conclusions</h2>
+  <p class="sdesc">Both of these found something. Neither would have been
+  noticed by looking at accuracy alone.</p>
+
+  <div class="decision">
+    <h3>Calibration, checked before thresholding</h3>
+    <p>A threshold on a confidence score means nothing unless the score tracks
+    reality. <span class="took">ECE 0.337 — the baseline is badly
+    <em>under</em>-confident: it says 0.47 and is right 80% of the time.</span>
+    That is exactly the state in which a sensible-looking cut-off silently
+    holds half the archive for no gain, and it is why the shipped default was
+    wrong.</p>
+  </div>
+
+  <div class="decision">
+    <h3>Held-out validation of the cut-off itself</h3>
+    <p>Choosing a threshold on the same documents you measure it on flatters
+    the result. Picking on one half and testing on the other gives
+    <span class="took">+11.5% optimism</span> — the sweep's own recommendation
+    over-promised by that much on documents it had not seen.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Design decisions</h2>
+  <p class="sdesc">The choices a reviewer would want justified.</p>
+
+  <div class="decision">
+    <h3>The taxonomy is configuration, not code</h3>
+    <p>One YAML file defines the institutions, their scope, and the
+    tie-breaking rules between confusable pairs. Prompts, labels, test data
+    and metrics all derive from it, so adding an institution is an edit to
+    data — nothing downstream hardcodes an id.</p>
+  </div>
+
+  <div class="decision">
+    <h3>Output is constrained to the institution list</h3>
+    <p>The destination is a JSON-schema <code>enum</code> of real ids, so the
+    model cannot invent one. Against a self-hosted gateway that may not
+    enforce schemas, the id is validated locally anyway — an invented
+    destination fails loudly rather than routing a document nowhere.</p>
+  </div>
+
+  <div class="decision">
+    <h3>Identifiers are masked before anything leaves the process</h3>
+    <p>National IDs, phones, IBANs, tax numbers and emails become
+    <em>typed</em> placeholders — <span class="ar">[رقم ضريبي]</span> still
+    signals "this mentions a tax number", which is what routes it, while the
+    identifying value is gone.
+    <span class="took">Measured cost: 37 identifiers masked, accuracy 80.2% →
+    80.2%.</span></p>
+  </div>
+
+  <div class="decision">
+    <h3>The labelling queue has two lanes</h3>
+    <p>A queue ranked by difficulty is a biased sample, so agreement measured
+    on it understates real accuracy. A parallel uniform-random lane is the
+    only honest estimate, and its documents are served <em>blind</em> — the
+    model's guess is stripped server-side, so a reviewer cannot be anchored
+    by it.</p>
+  </div>
+
+  <div class="decision">
+    <h3>Backends are swappable by design</h3>
+    <p>A registry behind structural <code>Protocol</code> contracts: a
+    self-hosted gateway, the Claude API, and an offline baseline all satisfy
+    one narrow interface. Batching is a <em>separate</em> protocol, so the
+    baseline is not made to grow stub methods for an API it has no notion of.
+    Defaults keep every document on the network; choosing a cloud path prints
+    exactly what leaves.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Engineering</h2>
+  <ul>
+    <li><strong>187 tests, 85.7% coverage</strong>, all offline — no test can
+      reach the network, and CI sets the API key to empty so one that tries
+      fails loudly.</li>
+    <li><strong>CI on every push</strong>: ruff, ruff format, mypy, and the
+      full suite across Python 3.11/3.12/3.13 on both Ubuntu and Windows, plus
+      a smoke job that drives the whole offline pipeline and a job that fails
+      if a credential or a real document is ever committed.</li>
+    <li><strong>A full end-to-end sweep from a clean clone</strong> found six
+      defects that unit tests, lint and types had all passed — including a raw
+      SDK traceback on a missing key, and an evaluator that silently scored
+      only the overlap when pointed at the wrong prediction file.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>What this cannot tell you</h2>
+  <p class="sdesc">Stated first rather than buried, because these matter more
+  than any figure above.</p>
+
+  <div class="limit">
+    <h3>The taxonomy is unreviewed by a domain expert</h3>
+    <p>The 14 institutions and their boundary rules are a careful
+    reconstruction, not confirmed practice. If they are wrong, every number
+    here is wrong with them. A 20-minute Arabic review sheet exists to settle
+    it, including whether ministry-level routing is even actionable and
+    whether one destination per document is the right model at all.</p>
+  </div>
+
+  <div class="limit">
+    <h3>No real document has been processed, and no LLM has been scored</h3>
+    <p>Every figure above is the offline baseline on authored documents. The
+    Claude and self-hosted paths are verified by request-shape inspection and
+    stubbed tests only — neither has made a live call. The baseline exists to
+    be the number the real models must beat.</p>
+  </div>
+
+  <div class="limit">
+    <h3>OCR is verified only on clean input</h3>
+    <p>Tesseract reads rendered Arabic at 29/29 words exact. That is a
+    ceiling, not a forecast — stamped, faxed and skewed paper is a different
+    problem and remains unmeasured.</p>
+  </div>
+</section>
+
+<section>
+  <h2>What would change the picture</h2>
+  <ul>
+    <li><strong>Fifty real documents</strong>, sampled as a contiguous slice
+      rather than hand-picked, would turn every figure here from a
+      discrimination test into a measurement.</li>
+    <li><strong>One domain conversation</strong> would confirm or correct the
+      taxonomy, and answer the multi-label and granularity questions before
+      they become expensive.</li>
+    <li><strong>Model access</strong> — the gateway or an API key — would
+      produce the first real classifier score against the 63.6% baseline.</li>
+  </ul>
+</section>
+
+<p class="foot">
+  Figures regenerated from a clean clone at the time of writing. Source,
+  corpus and full methodology:
+  <a href="https://github.com/rayan4qasem/multi-lingual-classification-problem">github.com/rayan4qasem/multi-lingual-classification-problem</a>
+</p>
+
+</div>
