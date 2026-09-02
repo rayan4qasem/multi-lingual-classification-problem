@@ -1,0 +1,39 @@
+# Line endings
+#
+# Normalize every text file to LF in the repository and check it out as LF,
+# regardless of each contributor's core.autocrlf setting. This matches the
+# current working tree, so adding it causes no churn — and it stops the same
+# file showing up as a whole-file diff just because it was touched on a
+# different machine. Nothing here is a .bat/.cmd file, which is the usual
+# reason to want CRLF on checkout.
+* text=auto eol=lf
+
+# Source and config — stated explicitly so intent survives future edits.
+*.py     text eol=lf
+*.toml   text eol=lf
+*.md     text eol=lf
+*.cfg    text eol=lf
+
+# Data. The Arabic corpora and datasets are UTF-8 text; keep git treating
+# them as such so diffs stay readable rather than collapsing to "binary".
+*.yaml   text eol=lf
+*.yml    text eol=lf
+*.json   text eol=lf
+*.jsonl  text eol=lf
+*.txt    text eol=lf
+*.csv    text eol=lf
+
+# Binary — never touch these. Trained models and the scanned/digital
+# documents the pipeline ingests would be corrupted by EOL conversion.
+*.joblib binary
+*.pkl    binary
+*.pdf    binary
+*.docx   binary
+*.xlsx   binary
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.tif    binary
+*.tiff   binary
+*.ttf    binary
+*.woff2  binary
