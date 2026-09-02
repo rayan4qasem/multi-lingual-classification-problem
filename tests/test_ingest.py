@@ -324,3 +324,60 @@ def test_claude_backend_does_not_construct_a_client_until_used():
     # happen just because a registry was built.
     backend = ClaudeVisionOcr()
     assert backend._client is None
+
+
+# ---------- regressions found by the end-to-end sweep ----------
+
+
+class _UnauthenticatedMessages:
+    """Mirrors the real SDK: constructs fine, rejects at request time."""
+
+    def create(self, **kwargs):
+        raise TypeError("Could not resolve authentication method.")
+
+
+class _UnauthenticatedClient:
+    def __init__(self):
+        self.messages = _UnauthenticatedMessages()
+
+
+def test_missing_credentials_surface_as_ocr_unavailable():
+    """Found end to end: a PDF without an Arabic text layer and no API key
+    crashed with a raw anthropic TypeError.
+
+    The seam matters. `anthropic.Anthropic()` succeeds without a key and only
+    raises when the request is made, so a test that mocks the constructor
+    passes while the real path stays broken - which is what happened the
+    first time this was fixed.
+    """
+    backend = ClaudeVisionOcr(client=_UnauthenticatedClient())
+    with pytest.raises(OCRUnavailable, match="ANTHROPIC_API_KEY"):
+        backend.transcribe([b"page"])
+
+
+def test_ocr_unavailable_names_the_local_alternative():
+    backend = ClaudeVisionOcr(client=_UnauthenticatedClient())
+    with pytest.raises(OCRUnavailable, match="tesseract"):
+        backend.transcribe([b"page"])
+
+
+def test_non_auth_failures_are_not_disguised_as_ocr_unavailable():
+    """A network failure is a different problem and must not be reported as
+    'set your API key'."""
+
+    class _Flaky:
+        class messages:
+            @staticmethod
+            def create(**kwargs):
+                raise ConnectionError("network down")
+
+    with pytest.raises(ConnectionError):
+        ClaudeVisionOcr(client=_Flaky()).transcribe([b"page"])
+
+
+@pytest.mark.parametrize("name", ["absent.pdf", "absent.txt", "absent.docx", "absent.png"])
+def test_missing_files_raise_filenotfound_for_every_format(tmp_path, name):
+    """PyMuPDF raises its own error type for a missing file, which used to
+    escape as a traceback while a missing .txt reported cleanly."""
+    with pytest.raises(FileNotFoundError, match="no such file"):
+        ingest.load_document(tmp_path / name, ocr_backend=None)

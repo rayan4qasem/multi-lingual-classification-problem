@@ -157,3 +157,33 @@ def test_routing_table_respects_its_limit():
 
     table = reporting.routing_table(baseline.classify_many(docs[:20]), taxonomy.load(), limit=5)
     assert table.row_count == 5
+
+
+# ---------- regressions found by the end-to-end sweep ----------
+
+
+def test_every_ingesting_command_accepts_a_model_path():
+    """`label prelabel` hardcoded models/baseline.joblib while `classify`
+    took --model-path, so a baseline trained anywhere else was unreachable
+    from the labeling loop."""
+    import inspect
+
+    from docrouter import cli
+
+    for command in (cli.classify, cli.label_prelabel):
+        params = inspect.signature(command).parameters
+        assert "model_path" in params, f"{command.__name__} lacks --model-path"
+
+
+def test_cli_ingestion_is_funnelled_through_one_helper():
+    """Ingestion errors are translated in _load_documents; call sites that
+    bypass it would reintroduce raw tracebacks."""
+    import inspect
+
+    from docrouter import cli
+
+    source = inspect.getsource(cli)
+    body = source.split("def _load_documents", 1)[1]
+    after_helper = body.split("def _write_predictions", 1)[1]
+    assert "ingest.load_directory" not in after_helper
+    assert "ingest.load_document" not in after_helper

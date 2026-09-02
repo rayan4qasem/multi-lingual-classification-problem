@@ -28,6 +28,7 @@ from .classify import (
     create_classifier,
 )
 from .evaluate import evaluate as run_evaluate
+from .models import Document
 from .protocols import BatchClassifier, Classifier
 from .taxonomy import load as load_taxonomy
 
@@ -84,6 +85,30 @@ def _make_batch_classifier(backend: str = "llm", **kwargs) -> BatchClassifier:
         )
         raise typer.Exit(1)
     return clf
+
+
+def _load_documents(path: Path, ocr: str = "claude") -> list[Document]:
+    """Ingest a .jsonl dataset, a folder, or a single file.
+
+    Single place where ingestion failures become CLI errors, so an
+    unreadable scan or an unsupported format reports something actionable
+    instead of a traceback.
+    """
+    try:
+        if path.suffix == ".jsonl":
+            return mockdata.load_jsonl(path)
+        if path.is_dir():
+            return ingest.load_directory(path, ocr_backend=ocr)
+        return [ingest.load_document(path, ocr_backend=ocr)]
+    except ingest.UnsupportedDocument as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from None
+    except ingest.OCRUnavailable as exc:
+        console.print(f"[red]Cannot read scanned input.[/red] {exc}")
+        raise typer.Exit(1) from None
+    except FileNotFoundError:
+        console.print(f"[red]No such file or directory: {path}[/red]")
+        raise typer.Exit(1) from None
 
 
 def _write_predictions(predictions, path: Path) -> Path:
@@ -156,16 +181,9 @@ def classify(
     """Route documents to institutions."""
     tax = load_taxonomy()
 
-    if path.suffix == ".jsonl":
-        docs = mockdata.load_jsonl(path)
-    elif path.is_dir():
-        if backend == "llm":
-            _require_key()
-        docs = ingest.load_directory(path, ocr_backend=ocr)
-    else:
-        if backend == "llm":
-            _require_key()
-        docs = [ingest.load_document(path, ocr_backend=ocr)]
+    if backend == "llm":
+        _require_key()
+    docs = _load_documents(path, ocr)
 
     if limit:
         docs = docs[:limit]
@@ -267,6 +285,17 @@ def evaluate(
     tax = load_taxonomy()
     report = run_evaluate(docs, preds, taxonomy=tax)
 
+    # Scoring is matched on doc_id, so a mismatched prediction file silently
+    # scores only the overlap. Say so, rather than reporting a confident
+    # number computed from a fraction of the data.
+    labeled = sum(1 for d in docs if d.true_label)
+    if report.total < labeled or report.total < len(preds):
+        console.print(
+            f"[yellow]Scored {report.total} document(s): {labeled} labeled in "
+            f"{dataset.name}, {len(preds)} prediction(s) in {predictions.name}. "
+            "Only documents present in both were scored.[/yellow]"
+        )
+
     for line in report.summary_lines(tax):
         console.print(line)
 
@@ -292,11 +321,7 @@ def batch_submit(
 ) -> None:
     """Submit a dataset to the Batches API and print the batch id."""
     _require_key()
-    docs = (
-        mockdata.load_jsonl(dataset)
-        if dataset.suffix == ".jsonl"
-        else ingest.load_directory(dataset)
-    )
+    docs = _load_documents(dataset)
     if limit:
         docs = docs[:limit]
     clf = _make_batch_classifier("llm", model=model, effort=effort)
@@ -471,6 +496,9 @@ def label_prelabel(
     ),
     per_class_cap: int = typer.Option(0, help="max per predicted class (0 = uncapped)"),
     ocr: str = typer.Option("claude", help="OCR backend for scanned input"),
+    model_path: Path = typer.Option(
+        MODELS / "baseline.joblib", help="trained artifact; baseline backend only"
+    ),
     compare_baseline: bool = typer.Option(
         True, help="also run the offline baseline, to use disagreement as a signal"
     ),
@@ -486,12 +514,7 @@ def label_prelabel(
     store = LabelStore(labels)
     done = store.labeled_ids()
 
-    if path.suffix == ".jsonl":
-        docs = mockdata.load_jsonl(path)
-    elif path.is_dir():
-        docs = ingest.load_directory(path, ocr_backend=ocr)
-    else:
-        docs = [ingest.load_document(path, ocr_backend=ocr)]
+    docs = _load_documents(path, ocr)
 
     fresh = [d for d in docs if d.doc_id not in done]
     console.print(f"ingested {len(docs)} document(s); {len(fresh)} not yet reviewed")
@@ -505,12 +528,11 @@ def label_prelabel(
     if backend != "none":
         if backend == "llm":
             _require_key()
-        clf = _make_classifier(backend, taxonomy=tax, model_path=MODELS / "baseline.joblib")
+        clf = _make_classifier(backend, taxonomy=tax, model_path=model_path)
         with console.status(f"Pre-labeling {len(fresh)} document(s) with {clf.name}..."):
             predictions = clf.classify_many(fresh)
 
     if compare_baseline and backend == "llm":
-        model_path = MODELS / "baseline.joblib"
         if model_path.exists():
             baseline_predictions = (
                 BaselineClassifier(taxonomy=tax).load(model_path).classify_many(fresh)
@@ -646,10 +668,7 @@ def label_export(
         console.print("[yellow]No confirmed labels to export yet.[/yellow]")
         raise typer.Exit(0)
 
-    if source.suffix == ".jsonl":
-        docs = mockdata.load_jsonl(source)
-    else:
-        docs = ingest.load_directory(source, ocr_backend=ocr)
+    docs = _load_documents(source, ocr)
 
     labeled = []
     for doc in docs:
@@ -690,10 +709,7 @@ def prompt_build(
 
     tax = load_taxonomy()
 
-    if source.suffix == ".jsonl":
-        docs = mockdata.load_jsonl(source)
-    else:
-        docs = ingest.load_directory(source, ocr_backend=ocr)
+    docs = _load_documents(source, ocr)
 
     gold: dict[str, str] = {}
     if labels.exists():

@@ -85,7 +85,16 @@ class ClaudeVisionOcr:
         if self._client is None:
             import anthropic
 
-            self._client = anthropic.Anthropic()
+            try:
+                self._client = anthropic.Anthropic()
+            except Exception as exc:
+                # The SDK raises a bare TypeError when no credential resolves.
+                # Translated here because this layer knows *why* OCR cannot
+                # run, and the CLI only has to handle one exception type.
+                raise OCRUnavailable(
+                    "Claude OCR needs ANTHROPIC_API_KEY to be set. Either set it, "
+                    "or pass --ocr tesseract to transcribe locally."
+                ) from exc
         return self._client
 
     def _resolve_model(self) -> str:
@@ -109,11 +118,25 @@ class ClaudeVisionOcr:
         ]
         content.append({"type": "text", "text": OCR_INSTRUCTION})
 
-        response = self._ensure_client().messages.create(
-            model=self._resolve_model(),
-            max_tokens=self.max_tokens,
-            messages=[{"role": "user", "content": content}],
-        )
+        import anthropic
+
+        try:
+            response = self._ensure_client().messages.create(
+                model=self._resolve_model(),
+                max_tokens=self.max_tokens,
+                messages=[{"role": "user", "content": content}],
+            )
+        except (TypeError, anthropic.AuthenticationError, anthropic.PermissionDeniedError) as exc:
+            # The SDK constructs happily without a key and only rejects the
+            # request, as a bare TypeError from header validation. Translated
+            # here so the CLI has one exception type to handle. Network and
+            # rate-limit failures are a different problem and propagate as
+            # themselves.
+            raise OCRUnavailable(
+                "Claude OCR could not authenticate. Set ANTHROPIC_API_KEY, "
+                "or pass --ocr tesseract to transcribe locally."
+            ) from exc
+
         return "".join(b.text for b in response.content if b.type == "text")
 
 
@@ -371,6 +394,11 @@ def load_document(
 ) -> Document:
     """Ingest one file, OCR-ing only what needs it."""
     path = Path(path)
+    # Checked once here rather than per extractor: PyMuPDF raises its own
+    # error type for a missing file, which would otherwise escape as a
+    # traceback while a missing .txt reported cleanly.
+    if not path.exists():
+        raise FileNotFoundError(f"no such file: {path}")
     registry = registry or DEFAULT_REGISTRY
     extractor = registry.get(path.suffix)
     ocr = resolve_ocr(ocr_backend, client=client)
