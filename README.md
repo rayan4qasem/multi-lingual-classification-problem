@@ -453,9 +453,16 @@ Everything offline — no API calls, no key needed.
 
 ## Next steps
 
-1. **Get real labeled documents.** Everything below depends on this. The
-   labeling loop above is built and tested; point `label prelabel` at a real
-   folder and start. Aim for ~25/class before trusting any per-class number.
+1. **Get the taxonomy reviewed by a domain expert.** Everything else is
+   measured against it. [`docs/taxonomy-review.html`](docs/taxonomy-review.html)
+   is a 20-minute Arabic review sheet built for exactly this: it puts the 14
+   institutions, all 8 confusion pairs (both directions, with real scenarios
+   and the call we made), and the granularity, single-vs-multi-label and
+   cost-asymmetry questions in front of someone who does this work. Answers
+   save in the browser and copy out as text.
+6. **Get real labeled documents.** The labeling loop is built and tested;
+   point `label prelabel` at a real folder and start. Aim for ~25/class
+   before trusting any per-class number.
 2. **Tune the review threshold** on that real slice — the 0.55 default is a
    placeholder, not a finding. Once the gold set exists, sweep it against the
    auto-routed accuracy that `evaluate` reports.

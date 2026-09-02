@@ -1,0 +1,565 @@
+<title>مراجعة قائمة الجهات المختصة</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+:root{
+  --paper:#f8faf9;
+  --card:#ffffff;
+  --ink:#14201c;
+  --muted:#5d6b66;
+  --faint:#8b9691;
+  --rule:#dbe4e0;
+  --rule-strong:#c3d1cb;
+  --accent:#1f5f4e;
+  --accent-soft:#e6f0ec;
+  --differ:#9a3412;
+  --differ-soft:#f8ebe4;
+  --unsure:#8a6d1f;
+  --unsure-soft:#f7f1e0;
+  --quote-bg:#f2f6f4;
+
+  --f-ui:"IBM Plex Sans Arabic","Segoe UI",Tahoma,sans-serif;
+  --f-doc:"Noto Naskh Arabic","Times New Roman",serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0d1512;
+    --card:#141d19;
+    --ink:#e4ece8;
+    --muted:#9aaaa4;
+    --faint:#6f807a;
+    --rule:#243029;
+    --rule-strong:#33443c;
+    --accent:#6fbfa5;
+    --accent-soft:#16302a;
+    --differ:#e08b63;
+    --differ-soft:#31201a;
+    --unsure:#d4b264;
+    --unsure-soft:#2d2718;
+    --quote-bg:#101a17;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0d1512;
+  --card:#141d19;
+  --ink:#e4ece8;
+  --muted:#9aaaa4;
+  --faint:#6f807a;
+  --rule:#243029;
+  --rule-strong:#33443c;
+  --accent:#6fbfa5;
+  --accent-soft:#16302a;
+  --differ:#e08b63;
+  --differ-soft:#31201a;
+  --unsure:#d4b264;
+  --unsure-soft:#2d2718;
+  --quote-bg:#101a17;
+}
+
+*{box-sizing:border-box}
+html{direction:rtl}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--f-ui);font-size:16px;line-height:1.85;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:820px;margin:0 auto;padding:0 22px 96px}
+
+/* ---------- masthead ---------- */
+header.mast{
+  border-bottom:2px solid var(--accent);
+  padding:44px 0 22px;margin-bottom:38px;
+}
+.eyebrow{
+  font-size:12px;letter-spacing:.14em;color:var(--accent);
+  font-weight:600;margin:0 0 14px;
+}
+h1{
+  font-size:clamp(27px,4.4vw,38px);line-height:1.35;margin:0 0 14px;
+  font-weight:700;text-wrap:balance;letter-spacing:-.01em;
+}
+.standfirst{font-size:17px;color:var(--muted);margin:0;max-width:60ch}
+.meta{
+  display:flex;flex-wrap:wrap;gap:8px 26px;margin-top:22px;
+  font-size:13px;color:var(--faint);
+}
+.meta b{color:var(--muted);font-weight:600}
+
+/* ---------- callout ---------- */
+.note{
+  background:var(--accent-soft);border-right:3px solid var(--accent);
+  padding:18px 20px;border-radius:3px;margin:0 0 40px;font-size:15px;
+}
+.note p{margin:0 0 10px}
+.note p:last-child{margin:0}
+.note strong{font-weight:600}
+
+/* ---------- sections ---------- */
+section{margin:0 0 52px}
+.shead{display:flex;align-items:baseline;gap:12px;margin:0 0 8px}
+.snum{
+  font-family:var(--f-mono);font-size:13px;color:var(--accent);
+  font-weight:500;padding-top:4px;
+}
+h2{font-size:22px;font-weight:700;margin:0;line-height:1.4;text-wrap:balance}
+.sdesc{color:var(--muted);font-size:15px;margin:0 0 22px;max-width:62ch}
+
+/* ---------- institution grid ---------- */
+.inst{
+  display:grid;grid-template-columns:1fr auto;gap:2px 16px;
+  align-items:center;padding:11px 0;border-bottom:1px solid var(--rule);
+}
+.inst:last-of-type{border-bottom:0}
+.inst .ar{font-weight:500}
+.inst .id{
+  font-family:var(--f-mono);font-size:11.5px;color:var(--faint);
+  grid-column:1;
+}
+.inst .ctl{grid-row:span 2;grid-column:2}
+
+/* ---------- verdict control ---------- */
+.verdict{display:flex;gap:5px}
+.verdict input{position:absolute;opacity:0;width:0;height:0}
+.verdict label{
+  font-size:12.5px;padding:5px 12px;border:1px solid var(--rule-strong);
+  border-radius:99px;cursor:pointer;color:var(--muted);
+  white-space:nowrap;transition:background .12s,color .12s,border-color .12s;
+  user-select:none;
+}
+.verdict label:hover{border-color:var(--accent)}
+.verdict input:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}
+.verdict input:checked+label[data-v="ok"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.verdict input:checked+label[data-v="no"]{background:var(--differ);border-color:var(--differ);color:#fff}
+.verdict input:checked+label[data-v="idk"]{background:var(--unsure);border-color:var(--unsure);color:#fff}
+
+/* ---------- boundary case cards ---------- */
+.case{
+  background:var(--card);border:1px solid var(--rule);border-radius:5px;
+  padding:20px 22px;margin:0 0 18px;
+}
+.pair{
+  font-size:12px;color:var(--faint);font-family:var(--f-mono);
+  margin:0 0 14px;padding-bottom:12px;border-bottom:1px solid var(--rule);
+  display:flex;flex-wrap:wrap;gap:6px;align-items:center;
+}
+.pair .vs{color:var(--accent);font-weight:500}
+.subj{font-weight:600;font-size:15.5px;margin:0 0 10px}
+blockquote{
+  font-family:var(--f-doc);font-size:16px;line-height:2;
+  margin:0 0 16px;padding:15px 17px;background:var(--quote-bg);
+  border-radius:4px;color:var(--ink);
+}
+.claim{
+  display:flex;flex-wrap:wrap;align-items:center;gap:10px;
+  font-size:14.5px;margin:0 0 14px;
+}
+.claim .lbl{color:var(--muted)}
+.claim .val{
+  font-weight:600;color:var(--accent);background:var(--accent-soft);
+  padding:3px 11px;border-radius:99px;
+}
+.ask{font-size:14px;color:var(--muted);margin:0 0 10px}
+
+/* ---------- free text ---------- */
+textarea{
+  width:100%;font-family:var(--f-ui);font-size:14.5px;line-height:1.7;
+  padding:11px 13px;border:1px solid var(--rule-strong);border-radius:4px;
+  background:var(--paper);color:var(--ink);resize:vertical;min-height:64px;
+}
+textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+textarea::placeholder{color:var(--faint)}
+.tlabel{display:block;font-size:13.5px;color:var(--muted);margin:14px 0 6px}
+
+/* ---------- choice blocks (big questions) ---------- */
+.choices{display:flex;flex-direction:column;gap:9px;margin:0 0 6px}
+.choice{
+  display:flex;gap:11px;align-items:flex-start;padding:13px 15px;
+  border:1px solid var(--rule-strong);border-radius:4px;cursor:pointer;
+  background:var(--card);transition:border-color .12s,background .12s;
+}
+.choice:hover{border-color:var(--accent)}
+.choice input{margin:5px 0 0;accent-color:var(--accent);flex:none}
+.choice input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.choice.sel{border-color:var(--accent);background:var(--accent-soft)}
+.choice .ct{font-size:15px}
+.choice .cs{display:block;font-size:13.5px;color:var(--muted);margin-top:3px}
+
+/* ---------- footer / export ---------- */
+.export{
+  border-top:2px solid var(--accent);margin-top:56px;padding-top:26px;
+}
+button.copy{
+  font-family:var(--f-ui);font-size:15px;font-weight:600;
+  background:var(--accent);color:#fff;border:0;border-radius:4px;
+  padding:12px 26px;cursor:pointer;transition:opacity .12s;
+}
+button.copy:hover{opacity:.88}
+button.copy:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.saved{font-size:13px;color:var(--faint);margin-top:12px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (max-width:560px){
+  .inst{grid-template-columns:1fr}
+  .inst .ctl{grid-row:auto;grid-column:1;margin-top:6px}
+}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">مراجعة فنية — مطلوب رأي مختص</p>
+  <h1>قائمة الجهات المختصة بفرز الوثائق</h1>
+  <p class="standfirst">
+    نظام آلي يقرأ الوثيقة الواردة ويحدد الجهة الحكومية المختصة بمعالجتها.
+    القائمة أدناه وقواعد التمييز بين الجهات المتقاربة وُضعت اجتهاداً ولم
+    يراجعها مختص حتى الآن. هذه الورقة لمراجعتها.
+  </p>
+  <div class="meta">
+    <span><b>الزمن المتوقع:</b> ٢٠–٣٠ دقيقة</span>
+    <span><b>عدد الجهات:</b> ١٤</span>
+    <span><b>حالات الحدود:</b> ٨ أزواج</span>
+  </div>
+</header>
+
+<div class="note">
+  <p><strong>لماذا هذه المراجعة مهمة:</strong> كل ما بُني بعد هذه القائمة —
+  من قياس الدقة إلى ضبط عتبة التحويل للمراجعة البشرية — مبني عليها. إن كانت
+  القائمة أو حدودها خاطئة، فكل رقم بعدها خاطئ معها.</p>
+  <p>إجاباتك تُحفظ في متصفحك تلقائياً، وفي آخر الصفحة زر لنسخها كاملة
+  لإرسالها. لا تُرسل أي بيانات من هذه الصفحة تلقائياً.</p>
+</div>
+
+<!-- 1 ................................................................. -->
+<section>
+  <div class="shead"><span class="snum">١</span><h2>هل الجهات الأربع عشرة صحيحة؟</h2></div>
+  <p class="sdesc">
+    لكل جهة: هل هي جهة فرز صحيحة ومستقلة في هذا السياق؟ علّم «غير مناسبة»
+    إن كانت زائدة، أو مندمجة مع غيرها، أو ليست جهة تُوجَّه إليها الوثائق ابتداءً.
+  </p>
+  <div id="institutions"></div>
+
+  <label class="tlabel" for="missing">جهات ناقصة يجب إضافتها:</label>
+  <textarea id="missing" data-k="missing"
+    placeholder="مثال: هيئة حقوق الإنسان، ديوان المظالم، الهيئة العامة للعقار…"></textarea>
+</section>
+
+<!-- 2 ................................................................. -->
+<section>
+  <div class="shead"><span class="snum">٢</span><h2>هل مستوى «الوزارة» كافٍ للتوجيه؟</h2></div>
+  <p class="sdesc">
+    النظام حالياً يوجّه إلى الوزارة أو الهيئة. السؤال: هل هذا كافٍ عملياً
+    لكي يتصرف الموظف المستلم، أم أن التوجيه الحقيقي يكون إلى إدارة أو فرع
+    أو منطقة داخل الجهة؟ هذا السؤال يغيّر بنية النظام، لا إعداداته.
+  </p>
+  <div class="choices" data-q="granularity">
+    <label class="choice"><input type="radio" name="granularity" value="ministry">
+      <span class="ct">مستوى الوزارة كافٍ
+        <span class="cs">الوثيقة تصل الجهة ثم تُوزّع داخلياً، ولا يعنينا ما بعد ذلك.</span></span></label>
+    <label class="choice"><input type="radio" name="granularity" value="department">
+      <span class="ct">يلزم مستوى الإدارة أو القطاع
+        <span class="cs">«وزارة الصحة» وحدها لا تكفي؛ لا بد من تحديد الإدارة المختصة.</span></span></label>
+    <label class="choice"><input type="radio" name="granularity" value="region">
+      <span class="ct">يلزم البُعد الجغرافي أيضاً
+        <span class="cs">الفرع أو الأمانة أو المنطقة جزء أصيل من قرار التوجيه.</span></span></label>
+  </div>
+  <label class="tlabel" for="gran_note">إن اخترت غير الأول، ما المستوى المطلوب بالضبط؟</label>
+  <textarea id="gran_note" data-k="gran_note" placeholder="اذكر مثالاً واحداً كاملاً…"></textarea>
+</section>
+
+<!-- 3 ................................................................. -->
+<section>
+  <div class="shead"><span class="snum">٣</span><h2>جهة واحدة أم أكثر لكل وثيقة؟</h2></div>
+  <p class="sdesc">
+    النظام مبني على أن لكل وثيقة جهة واحدة مختصة. إن كان الواقع غير ذلك —
+    جهة أصلية وأخرى صورة، أو جهتان معاً — فهذا تغيير في تصميم النظام وليس
+    ضبطاً لإعداداته، ويستحسن معرفته الآن.
+  </p>
+  <div class="choices" data-q="cardinality">
+    <label class="choice"><input type="radio" name="cardinality" value="single">
+      <span class="ct">جهة واحدة دائماً
+        <span class="cs">لكل وثيقة مختص واحد لا غير.</span></span></label>
+    <label class="choice"><input type="radio" name="cardinality" value="primary_cc">
+      <span class="ct">جهة أصلية مع صور لجهات أخرى
+        <span class="cs">مختص واحد، ويُبلَّغ غيره للعلم.</span></span></label>
+    <label class="choice"><input type="radio" name="cardinality" value="multi">
+      <span class="ct">قد تختص جهتان فأكثر فعلياً
+        <span class="cs">تُعالَج الوثيقة لدى أكثر من جهة بالتوازي.</span></span></label>
+  </div>
+  <label class="tlabel" for="card_note">إن كان التعدد وارداً، ما نسبته تقريباً؟ وما أشيع مثال عليه؟</label>
+  <textarea id="card_note" data-k="card_note" placeholder="…"></textarea>
+</section>
+
+<!-- 4 ................................................................. -->
+<section>
+  <div class="shead"><span class="snum">٤</span><h2>حالات الحدود — الأهم في هذه الورقة</h2></div>
+  <p class="sdesc">
+    ثمانية أزواج من الجهات يكثر الخلط بينها. لكل زوج حالتان اجتهدنا في
+    تحديد المختص بهما. اقرأ الحالة واحكم: هل الجهة المذكورة هي الصحيحة؟
+    هذه الأحكام هي ما يتعلّمه النظام، فخطأ واحد هنا يتكرر في كل وثيقة مشابهة.
+  </p>
+  <div id="cases"></div>
+</section>
+
+<!-- 5 ................................................................. -->
+<section>
+  <div class="shead"><span class="snum">٥</span><h2>أيهما أسوأ: توجيه خاطئ أم تأخير؟</h2></div>
+  <p class="sdesc">
+    عندما لا يثق النظام بقراره، يحجز الوثيقة لمراجعة موظف بدل توجيهها.
+    ضبط هذه العتبة يحتاج معرفة الكلفة الحقيقية للطرفين. افترضنا أن التوجيه
+    الخاطئ أسوأ بكثير من الانتظار — إن كان الانتظار في الواقع يمتد أسابيع،
+    فالافتراض معكوس.
+  </p>
+  <div class="choices" data-q="cost">
+    <label class="choice"><input type="radio" name="cost" value="wrong_much_worse">
+      <span class="ct">التوجيه الخاطئ أسوأ بكثير
+        <span class="cs">تصحيحه مكلف، وقد يضيع حق أو تفوت مدة نظامية.</span></span></label>
+    <label class="choice"><input type="radio" name="cost" value="wrong_slightly_worse">
+      <span class="ct">أسوأ قليلاً فقط
+        <span class="cs">يُكتشف الخطأ سريعاً ويُعاد توجيهه بلا أثر كبير.</span></span></label>
+    <label class="choice"><input type="radio" name="cost" value="delay_worse">
+      <span class="ct">بل التأخير أسوأ
+        <span class="cs">الوثيقة المحجوزة قد تبقى أسابيع في انتظار مراجع.</span></span></label>
+  </div>
+  <label class="tlabel" for="cost_note">كم يستغرق تصحيح توجيه خاطئ عملياً؟ وكم تبقى الوثيقة المحجوزة؟</label>
+  <textarea id="cost_note" data-k="cost_note" placeholder="…"></textarea>
+</section>
+
+<!-- 6 ................................................................. -->
+<section>
+  <div class="shead"><span class="snum">٦</span><h2>أين تذهب الوثيقة بعد تحديد جهتها؟</h2></div>
+  <p class="sdesc">
+    النظام اليوم ينتهي عند إصدار القرار ولا يسلّم الوثيقة لأحد. لبناء
+    التسليم نحتاج معرفة ما يستقبلها فعلاً.
+  </p>
+  <label class="tlabel" for="sink">النظام أو الجهة التي تستقبل الوثيقة الموجّهة:</label>
+  <textarea id="sink" data-k="sink"
+    placeholder="مثال: منصة المراسلات الحكومية، بريد إداري، نظام إدارة قضايا، جدول يتابعه موظف…"></textarea>
+  <label class="tlabel" for="volume">حجم الوثائق المتوقع يومياً أو شهرياً، ومن يعالجها اليوم:</label>
+  <textarea id="volume" data-k="volume" placeholder="…"></textarea>
+</section>
+
+<!-- 7 ................................................................. -->
+<section>
+  <div class="shead"><span class="snum">٧</span><h2>ملاحظات عامة</h2></div>
+  <p class="sdesc">أي شيء مهم لم تسأل عنه هذه الورقة.</p>
+  <textarea id="general" data-k="general" style="min-height:120px" placeholder="…"></textarea>
+</section>
+
+<div class="export">
+  <button class="copy" id="copyBtn" type="button">نسخ الإجابات كاملة</button>
+  <p class="saved" id="savedNote">تُحفظ إجاباتك في هذا المتصفح تلقائياً.</p>
+</div>
+
+</div>
+
+<script>
+document.documentElement.lang = "ar";
+document.documentElement.dir = "rtl";
+
+const INSTITUTIONS = [
+  ["interior_public_security","الأمن العام – وزارة الداخلية"],
+  ["public_prosecution","النيابة العامة"],
+  ["moj_courts","وزارة العدل"],
+  ["moh_health","وزارة الصحة"],
+  ["civil_defense","المديرية العامة للدفاع المدني"],
+  ["moe_education","وزارة التعليم"],
+  ["hrsd_labor","وزارة الموارد البشرية والتنمية الاجتماعية"],
+  ["gosi","المؤسسة العامة للتأمينات الاجتماعية"],
+  ["zatca","هيئة الزكاة والضريبة والجمارك"],
+  ["mci_commerce","وزارة التجارة"],
+  ["momah_municipal","وزارة الشؤون البلدية والقروية والإسكان"],
+  ["mot_transport","وزارة النقل والخدمات اللوجستية"],
+  ["civil_affairs","الأحوال المدنية"],
+  ["mewa_environment","وزارة البيئة والمياه والزراعة"]
+];
+const NAME = Object.fromEntries(INSTITUTIONS);
+
+const CASES = [
+  ["interior_public_security","public_prosecution","interior_public_security","بلاغ عن نصب واحتيال",
+   "تعرضت لعملية احتيال حولت على إثرها مبلغ ٣٨٬٠٠٠ ريال لحساب شخص عرض عليّ بضاعة عبر إحدى المنصات، ثم انقطع تواصله وأغلق الحساب. لدي صور المحادثات وإشعار التحويل واسم صاحب الحساب المستفيد. أرغب في تقديم بلاغ رسمي وضبط الشخص. لم يسبق تقديم بلاغ ولم تُفتح قضية بعد."],
+  ["interior_public_security","public_prosecution","public_prosecution","طلب بشأن مضبوطات في قضية",
+   "سبق أن تقدمت ببلاغ عن سرقة محتويات مستودعي، وضُبط شخصان وبحوزتهما جزء من المسروقات، وأُحيلت الأوراق وقُيدت القضية وجرى استجواب المضبوطين. أطلب تسليمي الأعيان المضبوطة العائدة لي بعد انتهاء الحاجة إليها في التحقيق."],
+
+  ["public_prosecution","moj_courts","public_prosecution","طلب سماع شاهد قبل الإحالة",
+   "بصفتي وكيلاً عن المشتكى عليه، أطلب سماع أقوال شاهد لم يُسمع حتى الآن، وهو الوحيد الذي كان حاضراً وقت الواقعة. الأوراق لم تُحل بعد إلى المحكمة، وما زالت في مرحلة جمع الاستدلالات والتحقيق."],
+  ["public_prosecution","moj_courts","moj_courts","مطالبة بالحق الخاص عن واقعة جنائية",
+   "صدر حكم في القضية الجزائية بإدانة الجاني عن واقعة الاعتداء التي تعرضت لها، واكتسب الحكم القطعية. وحيث إن الحكم اقتصر على الحق العام، أتقدم بدعواي للمطالبة بالتعويض عن الأضرار وتكاليف العلاج."],
+
+  ["hrsd_labor","gosi","gosi","إصابة عمل وتقدير العجز",
+   "أصبت أثناء عملي وسجلت المنشأة الإصابة، وانتهى العلاج بتقرير طبي نهائي يفيد ببقاء محدودية دائمة في حركة الكتف. لا خلاف بيني وبين صاحب العمل على الأجر أو العقد، وما زلت على رأس العمل. طلبي إحالتي للجنة الطبية لتقدير نسبة العجز وصرف التعويض."],
+  ["hrsd_labor","gosi","hrsd_labor","خصم من الراتب باسم الاشتراكات",
+   "يخصم صاحب العمل مبالغ شهرية من راتبي تفوق النسبة النظامية لحصة الموظف، ويدرجها في المسير تحت بند التأمينات، ورفض تزويدي بتفصيل الاحتساب. اعتراضي على تصرفه في أجري وعلى امتناعه عن بيان الخصومات."],
+
+  ["zatca","mci_commerce","zatca","تحصيل ضريبة دون فاتورة نظامية",
+   "أضاف البائع ١٥٪ على السعر باعتبارها ضريبة، وسلمني سنداً يدوياً لا يحمل رقماً ضريبياً ولا يستوفي عناصر الفاتورة، ورفض إصدار فاتورة إلكترونية. لا شكوى لدي على السلعة نفسها ولا على جودتها."],
+  ["zatca","mci_commerce","mci_commerce","أسعار معلنة تخالف المحصل عند الدفع",
+   "يعرض متجر أسعاراً على الرفوف تختلف عما يُحصل عند نقطة البيع، ويُقال إن الفرق ضريبة، رغم أن اللوحات تنص على أن الأسعار شاملة للضريبة. تكرر ذلك ثلاث مرات بفروق بين ٦٪ و١١٪."],
+
+  ["momah_municipal","civil_defense","civil_defense","مستودع سكني بلا وسائل حماية",
+   "مستودع في الدور الأرضي لمبنى سكني يحمل رخصة نشاط سارية، يخزن مواد سريعة الاشتعال بجوار لوحة الكهرباء الرئيسية، ولا توجد به وسيلة إطفاء أو إنذار، ومخرج الطوارئ الوحيد مغلق بالبضائع."],
+  ["momah_municipal","civil_defense","momah_municipal","مبنى آيل للسقوط",
+   "مبنى قديم مهجور تساقطت أجزاء من واجهته على الرصيف، ويدخله العابثون ليلاً، وشبّ فيه حريق صغير قبل شهرين أُطفئ في حينه. المطلوب إلزام مالكه بإزالته أو ترميمه وتسويره."],
+
+  ["momah_municipal","mot_transport","mot_transport","تقاطع خطر على طريق خارجي",
+   "التقاطع عند الكيلو ٣٤ على الطريق الرابط بين مدينتين يفتقر إلى مسار تباطؤ ولوحات تحذيرية، ووقعت فيه حوادث. الطريق خارجي ولا يقع ضمن النطاق العمراني لأي منهما."],
+  ["momah_municipal","mot_transport","momah_municipal","مواقف ورصف شارع تجاري داخلي",
+   "شارع تجاري داخل الحي يعاني غياب تنظيم المواقف، والرصف متهالك ومليء بمطبات غير نظامية أنشأها أصحاب المحلات. المطلوب إعادة الرصف وتخطيط المواقف."],
+
+  ["civil_affairs","moj_courts","civil_affairs","تنفيذ مضمون صك في السجل",
+   "صدر صك متضمن إثبات تاريخ ميلاد ابني بعد تعذر إثباته بالطرق العادية، واكتسب صفته النهائية. أطلب تنفيذ مضمونه في السجل المدني وتعديل تاريخ الميلاد وإصدار سجل محدث."],
+  ["civil_affairs","moj_courts","moj_courts","دعوى تصحيح اسم لتعذر القيد",
+   "يختلف اسم جدي المدون في سجل الأسرة عما هو مثبت في وثائق التملك القديمة، مما عطل نقل ملكية عقار موروث. أُفدت بأن التعديل لا يتم إدارياً وأنه يلزم صدور حكم."],
+
+  ["mewa_environment","momah_municipal","mewa_environment","تلوث ناتج عن تصريف صناعي",
+   "منشأة صناعية على أطراف الحي تصرّف سائلاً داكناً في مجرى طبيعي يمر بجوار مزارع، وتغير لون التربة وظهرت طبقة زيتية على سطح الماء. المطلوب أخذ عينات وتقييم الأثر البيئي."],
+  ["mewa_environment","momah_municipal","momah_municipal","تجمع مياه أمطار في شوارع الحي",
+   "تتجمع مياه الأمطار في ثلاثة مواضع من شوارع الحي بعد كل هطول وتبقى راكدة أياماً، بسبب هبوط في منسوب الشارع وانسداد فتحات تصريف السطح."]
+];
+
+const V = [["ok","صحيح"],["no","غير صحيح"],["idk","غير متأكد"]];
+
+function verdictHTML(name){
+  return '<div class="verdict">' + V.map(([v,t],i) =>
+    `<input type="radio" id="${name}_${v}" name="${name}" value="${v}">` +
+    `<label for="${name}_${v}" data-v="${v}">${t}</label>`).join("") + '</div>';
+}
+
+const instBox = document.getElementById("institutions");
+INSTITUTIONS.forEach(([id, ar]) => {
+  const row = document.createElement("div");
+  row.className = "inst";
+  row.innerHTML =
+    `<div class="ar">${ar}</div>` +
+    `<div class="ctl">${verdictHTML("inst_" + id)}</div>` +
+    `<div class="id">${id}</div>`;
+  instBox.appendChild(row);
+});
+// Relabel: for institutions the question is fitness, not correctness.
+document.querySelectorAll('#institutions label[data-v="ok"]').forEach(l => l.textContent = "مناسبة");
+document.querySelectorAll('#institutions label[data-v="no"]').forEach(l => l.textContent = "غير مناسبة");
+
+const caseBox = document.getElementById("cases");
+CASES.forEach(([a, b, answer, subj, text], i) => {
+  const other = answer === a ? b : a;
+  const el = document.createElement("article");
+  el.className = "case";
+  el.innerHTML =
+    `<p class="pair">${NAME[a]} <span class="vs">مقابل</span> ${NAME[b]}</p>` +
+    `<p class="subj">${subj}</p>` +
+    `<blockquote>${text}</blockquote>` +
+    `<p class="claim"><span class="lbl">اجتهدنا بأن المختص هو</span>` +
+    `<span class="val">${NAME[answer]}</span></p>` +
+    `<p class="ask">وليس ${NAME[other]}. هل هذا صحيح؟</p>` +
+    verdictHTML("case_" + i) +
+    `<label class="tlabel" for="case_note_${i}">إن كان غير صحيح، فما الجهة الصحيحة ولماذا؟</label>` +
+    `<textarea id="case_note_${i}" data-k="case_note_${i}" placeholder="…"></textarea>`;
+  caseBox.appendChild(el);
+});
+
+/* ---------- persistence (best-effort; private windows may block) ---------- */
+const KEY = "docrouter_taxonomy_review_v1";
+function readStore(){
+  try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { return {}; }
+}
+function writeStore(s){
+  try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* unavailable */ }
+}
+const store = readStore();
+
+document.querySelectorAll('input[type="radio"]').forEach(r => {
+  if (store[r.name] === r.value) r.checked = true;
+  r.addEventListener("change", () => {
+    store[r.name] = r.value; writeStore(store); paintChoices();
+  });
+});
+document.querySelectorAll("textarea").forEach(t => {
+  const k = t.dataset.k;
+  if (store[k]) t.value = store[k];
+  t.addEventListener("input", () => { store[k] = t.value; writeStore(store); });
+});
+function paintChoices(){
+  document.querySelectorAll(".choice").forEach(c => {
+    const input = c.querySelector("input");
+    c.classList.toggle("sel", input.checked);
+  });
+}
+paintChoices();
+
+/* ---------- export ---------- */
+const LABEL = { ok:"صحيح / مناسبة", no:"غير صحيح / غير مناسبة", idk:"غير متأكد" };
+const BIG = {
+  granularity:{ q:"مستوى التوجيه",
+    ministry:"مستوى الوزارة كافٍ", department:"يلزم مستوى الإدارة أو القطاع",
+    region:"يلزم البُعد الجغرافي أيضاً" },
+  cardinality:{ q:"عدد الجهات لكل وثيقة",
+    single:"جهة واحدة دائماً", primary_cc:"جهة أصلية مع صور", multi:"جهتان فأكثر" },
+  cost:{ q:"كلفة الخطأ",
+    wrong_much_worse:"التوجيه الخاطئ أسوأ بكثير",
+    wrong_slightly_worse:"أسوأ قليلاً فقط", delay_worse:"التأخير أسوأ" }
+};
+
+function buildReport(){
+  const L = [];
+  L.push("مراجعة قائمة الجهات المختصة");
+  L.push("التاريخ: " + new Date().toLocaleDateString("ar-SA"));
+  L.push("");
+
+  L.push("١) الجهات");
+  INSTITUTIONS.forEach(([id, ar]) => {
+    const v = store["inst_" + id];
+    L.push(`  ${ar} (${id}): ${v ? LABEL[v] : "— لم يُجب"}`);
+  });
+  if (store.missing) L.push("  جهات ناقصة: " + store.missing);
+  L.push("");
+
+  ["granularity","cardinality","cost"].forEach((k, n) => {
+    const spec = BIG[k], v = store[k];
+    L.push(`${["٢","٣","٥"][n]}) ${spec.q}: ${v ? spec[v] : "— لم يُجب"}`);
+    const note = store[k === "granularity" ? "gran_note" : k === "cardinality" ? "card_note" : "cost_note"];
+    if (note) L.push("   ملاحظة: " + note);
+    L.push("");
+  });
+
+  L.push("٤) حالات الحدود");
+  CASES.forEach(([a, b, answer, subj], i) => {
+    const v = store["case_" + i];
+    L.push(`  [${i + 1}] ${subj}`);
+    L.push(`      اجتهادنا: ${NAME[answer]} — الحكم: ${v ? LABEL[v] : "— لم يُجب"}`);
+    const note = store["case_note_" + i];
+    if (note) L.push("      التصحيح: " + note);
+  });
+  L.push("");
+
+  L.push("٦) وجهة الوثيقة بعد التوجيه");
+  L.push("   النظام المستقبل: " + (store.sink || "— لم يُجب"));
+  L.push("   الحجم والمعالج الحالي: " + (store.volume || "— لم يُجب"));
+  L.push("");
+  L.push("٧) ملاحظات عامة");
+  L.push("   " + (store.general || "— لا يوجد"));
+
+  return L.join("\n");
+}
+
+const btn = document.getElementById("copyBtn");
+const note = document.getElementById("savedNote");
+btn.addEventListener("click", async () => {
+  const text = buildReport();
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = "نُسخت الإجابات";
+    note.textContent = "الصقها في رسالة وأرسلها.";
+  } catch (e) {
+    // Clipboard blocked — fall back to selecting the text so it can be copied by hand.
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;inset:auto 0 0 0;height:40vh;z-index:99;font-family:var(--f-ui)";
+    document.body.appendChild(ta);
+    ta.select();
+    btn.textContent = "انسخ النص المحدد يدوياً";
+    note.textContent = "تعذّر النسخ التلقائي؛ النص محدد أسفل الصفحة.";
+  }
+  setTimeout(() => { btn.textContent = "نسخ الإجابات كاملة"; }, 4000);
+});
+</script>
