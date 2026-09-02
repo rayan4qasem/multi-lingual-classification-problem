@@ -17,6 +17,7 @@ from collections import Counter
 from pathlib import Path
 
 import typer
+from dotenv import load_dotenv
 from rich.console import Console
 
 from . import ingest, mockdata, reporting
@@ -40,6 +41,10 @@ app.add_typer(batch_app, name="batch")
 app.add_typer(label_app, name="label")
 app.add_typer(prompt_app, name="prompt")
 
+# Honour a .env file next to the project. The error below tells people to
+# create one, so it has to actually take effect - it previously did not.
+load_dotenv()
+
 console = Console()
 
 DATA = Path("data")
@@ -49,9 +54,11 @@ MODELS = Path("models")
 
 def _require_key() -> None:
     if not os.environ.get("ANTHROPIC_API_KEY"):
+        console.print("[red]ANTHROPIC_API_KEY is not set.[/red]")
+        console.print('  PowerShell:  [cyan]$env:ANTHROPIC_API_KEY="sk-ant-..."[/cyan]')
         console.print(
-            "[red]ANTHROPIC_API_KEY is not set.[/red] "
-            "Set it in your shell or copy .env.example to .env and load it."
+            "  or copy [cyan].env.example[/cyan] to [cyan].env[/cyan] "
+            "and put the key there — it is loaded automatically."
         )
         raise typer.Exit(1)
 
