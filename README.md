@@ -16,9 +16,30 @@ invent a destination that doesn't exist.
 
 ## Status
 
-Working scaffold, end to end, on **mock data**. The taxonomy is real; the
-documents are synthetic. Before anyone quotes an accuracy number, it needs to
-be re-measured on real correspondence — see [Next steps](#next-steps).
+Complete and tested end to end. Evaluated on a **purpose-built synthetic
+corpus**, because the data this system routes — incoming citizen
+correspondence — is operational and cannot be published; no public dataset
+carries destination-institution labels, and one that did would be a breach
+rather than a resource.
+
+So the corpus was built rather than borrowed: 86 authored Arabic documents
+across all 14 institutions, including 16 adversarial cases sitting exactly on
+the boundaries the taxonomy declares. It is deliberately hard — a keyword
+model scores 100% on the easy generator and 63.6% on these — which is what
+makes it useful for catching regressions and comparing backends.
+
+Two things it cannot tell you, stated plainly because they matter more than
+any number here:
+
+- **The taxonomy is unreviewed.** The 14 institutions and their boundary rules
+  are a careful reconstruction, not domain-confirmed.
+  [`docs/taxonomy-review.html`](docs/taxonomy-review.html) exists to fix that
+  in one 20-minute conversation.
+- **No real document has been processed.** OCR is verified at 29/29 words on
+  cleanly rendered Arabic, which is a ceiling; real scans of stamped, faxed
+  paper are unmeasured.
+
+Every figure below is reproducible from a clean clone with no API key.
 
 ## Setup
 
