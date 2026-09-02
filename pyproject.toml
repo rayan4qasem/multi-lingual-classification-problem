@@ -19,7 +19,13 @@ dependencies = [
 
 [project.optional-dependencies]
 tesseract = ["pytesseract>=0.3.10"]
-dev = ["pytest>=8.2"]
+dev = [
+    "pytest>=8.2",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "types-PyYAML",
+]
 
 [project.scripts]
 docrouter = "docrouter.cli:app"
@@ -33,3 +39,64 @@ packages = ["src/docrouter"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+filterwarnings = ["error::DeprecationWarning:docrouter.*"]
+
+[tool.coverage.run]
+source = ["src/docrouter"]
+branch = true
+
+[tool.coverage.report]
+# The CLI is exercised end to end by hand and in CI smoke steps rather than
+# unit tests, so it is excluded from the gate instead of being padded with
+# low-value tests that assert on Rich markup.
+omit = ["src/docrouter/cli.py"]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes
+    "I",         # import sorting
+    "B",         # bugbear
+    "UP",        # pyupgrade
+    "SIM",       # simplify
+    "C4",        # comprehensions
+    "RUF",       # ruff-specific
+]
+ignore = [
+    "E501",    # line length is handled by the formatter
+    "B008",    # Typer's Option()/Argument() defaults are the documented idiom
+    "RUF001",  # Arabic strings trip the ambiguous-unicode check by design
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests reach into internals deliberately (prompt prefixes, private helpers).
+"tests/*" = ["SLF001"]
+
+[tool.mypy]
+# 3.12 because numpy's bundled stubs use `type X = ...`, which mypy rejects
+# under an older target. Runtime support for 3.11 is proven by the CI matrix,
+# not by this setting.
+python_version = "3.12"
+files = ["src/docrouter"]
+ignore_missing_imports = true
+warn_redundant_casts = true
+warn_unused_ignores = false
+no_implicit_optional = true
+check_untyped_defs = true
+# Not strict mode: sklearn and PyMuPDF are largely untyped, and chasing full
+# annotations through them buys noise rather than safety. The contracts that
+# matter are in protocols.py and are checked.

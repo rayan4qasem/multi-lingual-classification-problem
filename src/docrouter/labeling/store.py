@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -37,7 +37,7 @@ class LabelRecord(BaseModel):
     model_backend: str | None = None
 
     reviewer: str = "unknown"
-    reviewed_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    reviewed_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     seconds_spent: float | None = None
     notes: str = ""
     # Reference, not content.
@@ -100,7 +100,7 @@ class LabelStore:
         if not self.path.exists():
             return []
         with self.path.open(encoding="utf-8") as fh:
-            return [LabelRecord.model_validate_json(l) for l in fh if l.strip()]
+            return [LabelRecord.model_validate_json(line) for line in fh if line.strip()]
 
     def current(self) -> dict[str, LabelRecord]:
         """Latest decision per document — last write wins, so re-labeling works."""

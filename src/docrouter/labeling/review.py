@@ -20,9 +20,10 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from ..taxonomy import Taxonomy
+from ..taxonomy import load as load_taxonomy
 from .prioritize import QueueItem
 from .store import LabelRecord, LabelStore
-from ..taxonomy import Taxonomy, load as load_taxonomy
 
 PAGE = r"""<!doctype html>
 <html lang="ar" dir="rtl"><head><meta charset="utf-8">
@@ -277,9 +278,14 @@ class ReviewSession:
             if self.is_blind(item):
                 # Stripped, not hidden. The prediction never reaches the page.
                 for field in (
-                    "model_label", "model_confidence", "model_backend",
-                    "model_rationale_ar", "alternatives", "baseline_label",
-                    "score", "reasons",
+                    "model_label",
+                    "model_confidence",
+                    "model_backend",
+                    "model_rationale_ar",
+                    "alternatives",
+                    "baseline_label",
+                    "score",
+                    "reasons",
                 ):
                     data[field] = None if field.startswith("model_") else []
                 data["reasons"] = ["عينة عشوائية"]
@@ -299,6 +305,10 @@ class ReviewSession:
 
         label = (body.get("label") or "").strip()
         status = body.get("status", "labeled")
+        # The body arrives from the browser, so both fields are validated here
+        # rather than trusted — the review UI is local, but it is still input.
+        if status not in ("labeled", "skipped", "unclear"):
+            raise ValueError(f"unknown status: {status!r}")
         if status == "labeled" and label not in set(self.taxonomy.ids):
             raise ValueError(f"unknown institution id: {label!r}")
 
@@ -415,4 +425,4 @@ def save_queue(items: list[QueueItem], path: str | Path) -> Path:
 
 def load_queue(path: str | Path) -> list[QueueItem]:
     with Path(path).open(encoding="utf-8") as fh:
-        return [QueueItem.model_validate_json(l) for l in fh if l.strip()]
+        return [QueueItem.model_validate_json(line) for line in fh if line.strip()]

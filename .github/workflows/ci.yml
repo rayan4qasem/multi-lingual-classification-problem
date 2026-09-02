@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to the same branch cancels the previous run rather than queueing.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # No test may reach the network. If one starts trying to, it fails loudly
+  # here rather than silently costing money or passing for the wrong reason.
+  ANTHROPIC_API_KEY: ""
+  PYTHONUTF8: "1"
+
+jobs:
+  lint:
+    name: lint & types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - name: Install
+        run: uv pip install --system -e ".[dev]"
+      - name: Ruff (lint)
+        run: ruff check --output-format=github .
+      - name: Ruff (format)
+        run: ruff format --check .
+      - name: Mypy
+        run: mypy
+
+  test:
+    name: tests (py${{ matrix.python }} · ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows is a first-class target here: it is where this runs today,
+        # and it is the reason OCR defaults to a backend with no binaries.
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install ${{ matrix.python }}
+      - name: Install
+        run: uv pip install --system -e ".[dev]"
+      - name: Tests
+        run: pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under=85
+      - name: Upload coverage
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+
+  smoke:
+    name: cli smoke (offline)
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - name: Install
+        run: uv pip install --system -e ".[dev]"
+      # Every step below runs with no API key, proving the offline path is
+      # genuinely offline and that the commands compose end to end.
+      - name: Taxonomy validates
+        run: docrouter taxonomy
+      - name: Generate the curated corpus
+        run: docrouter generate --engine curated --out data/generated/ci.jsonl
+      - name: Train the offline baseline
+        run: docrouter train-baseline --dataset data/generated/ci.jsonl --out models/ci.joblib
+      - name: Classify and evaluate
+        run: |
+          docrouter classify data/generated/ci.jsonl --backend baseline \
+            --out runs/ci_preds.jsonl
+          docrouter evaluate --dataset data/generated/ci.jsonl \
+            --predictions runs/ci_preds.jsonl --out runs/ci_report.json
+      - name: Threshold sweep
+        run: |
+          docrouter threshold --dataset data/generated/ci.jsonl \
+            --predictions runs/ci_preds.jsonl --out runs/ci_threshold.json
+      - name: Build few-shot examples
+        run: |
+          docrouter prompt build data/generated/ci.jsonl \
+            --predictions runs/ci_preds.jsonl --out data/prompt/ci_examples.json
+          docrouter prompt show --examples data/prompt/ci_examples.json
+      - name: Corpus difficulty gate
+        run: python scripts/corpus_difficulty.py
+
+  secrets:
+    name: no credentials committed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan tracked files
+        run: |
+          # The placeholder in .env.example is the only permitted match.
+          if git grep -nEI \
+            "sk-ant-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY" \
+            -- . ':!.env.example'; then
+            echo "::error::possible credential committed"
+            exit 1
+          fi
+          echo "no credentials found"
+      - name: Real documents must not be tracked
+        run: |
+          # data/curated is the authored synthetic corpus and is expected.
+          if git ls-files 'data/**' | grep -vE '^data/curated/' | grep -q .; then
+            echo "::error::unexpected files under data/ - real documents must stay gitignored"
+            git ls-files 'data/**' | grep -vE '^data/curated/'
+            exit 1
+          fi
+          echo "only the curated corpus is tracked"

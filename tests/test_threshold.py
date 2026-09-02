@@ -125,6 +125,7 @@ def test_resolved_accuracy_assumes_reviewers_fix_held_documents():
 
 # ---------- calibration ----------
 
+
 def test_calibration_detects_overconfidence():
     docs, preds = _case(2, 8, 0, 0)  # says 0.9, right 20% of the time
     report = calibration(docs, preds)
@@ -147,6 +148,7 @@ def test_calibration_bins_partition_the_data():
 
 # ---------- per class ----------
 
+
 def test_per_class_flags_thin_support():
     docs, preds = _case(3, 0, 0, 0)
     rows = {r.institution_id: r for r in per_class_thresholds(docs, preds, min_support=10)}
@@ -157,12 +159,15 @@ def test_per_class_flags_thin_support():
 
 def test_per_class_finds_a_cutoff_where_one_exists():
     docs, preds = _case(12, 0, 0, 6)
-    rows = {r.institution_id: r for r in per_class_thresholds(docs, preds, target_auto_accuracy=0.9)}
+    rows = {
+        r.institution_id: r for r in per_class_thresholds(docs, preds, target_auto_accuracy=0.9)
+    }
     assert rows["moj_courts"].threshold is not None
     assert rows["moj_courts"].auto_accuracy >= 0.9
 
 
 # ---------- split validation ----------
+
 
 def test_split_validation_reports_both_halves():
     # Comfortably separable, so the split cannot fail for want of a
@@ -183,6 +188,7 @@ def test_split_validation_returns_none_when_target_unreachable():
 
 
 # ---------- guards ----------
+
 
 def test_unlabeled_documents_are_rejected():
     docs = [Document(doc_id="a", text="نص")]

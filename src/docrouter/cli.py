@@ -1,11 +1,11 @@
 """Command line interface.
 
-    docrouter taxonomy                 inspect the institution list
-    docrouter generate                 build a mock dataset
-    docrouter classify <path>          route one file or a folder
-    docrouter train-baseline           fit the offline TF-IDF model
-    docrouter evaluate                 score a backend against labels
-    docrouter batch submit|collect     bulk routing at half price
+docrouter taxonomy                 inspect the institution list
+docrouter generate                 build a mock dataset
+docrouter classify <path>          route one file or a folder
+docrouter train-baseline           fit the offline TF-IDF model
+docrouter evaluate                 score a backend against labels
+docrouter batch submit|collect     bulk routing at half price
 """
 
 from __future__ import annotations
@@ -18,12 +18,17 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
-from rich.table import Table
 
-from . import ingest, mockdata
-from .classify import BaselineClassifier, LLMClassifier
+from . import ingest, mockdata, reporting
+from .classify import (
+    BaselineClassifier,
+    MissingModel,
+    UnknownBackend,
+    available_backends,
+    create_classifier,
+)
 from .evaluate import evaluate as run_evaluate
-from .models import Document
+from .protocols import BatchClassifier, Classifier
 from .taxonomy import load as load_taxonomy
 
 app = typer.Typer(add_completion=False, help="Arabic government document routing.")
@@ -50,15 +55,35 @@ def _require_key() -> None:
         raise typer.Exit(1)
 
 
-def _load_baseline(tax, threshold: float = 0.55) -> BaselineClassifier:
-    model_path = MODELS / "baseline.joblib"
-    if not model_path.exists():
+def _make_classifier(backend: str, **kwargs) -> Classifier:
+    """Build a classifier by name, turning registry errors into clean exits."""
+    try:
+        return create_classifier(backend, **kwargs)
+    except UnknownBackend:
         console.print(
-            f"[red]No trained baseline at {model_path}.[/red] "
-            "Run `docrouter train-baseline` first."
+            f"[red]Unknown backend {backend!r}.[/red] Available: {', '.join(available_backends())}"
+        )
+        raise typer.Exit(1) from None
+    except MissingModel as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from None
+
+
+def _make_batch_classifier(backend: str = "llm", **kwargs) -> BatchClassifier:
+    """Build a classifier that can also route in bulk.
+
+    Batching is a narrower contract than classification, so it is checked
+    rather than assumed — the offline baseline is a perfectly good
+    `Classifier` and deliberately not a `BatchClassifier`.
+    """
+    clf = _make_classifier(backend, **kwargs)
+    if not isinstance(clf, BatchClassifier):
+        console.print(
+            f"[red]Backend {backend!r} does not support batching.[/red] "
+            "Use `docrouter classify` instead."
         )
         raise typer.Exit(1)
-    return BaselineClassifier(taxonomy=tax, review_threshold=threshold).load(model_path)
+    return clf
 
 
 def _write_predictions(predictions, path: Path) -> Path:
@@ -73,13 +98,7 @@ def _write_predictions(predictions, path: Path) -> Path:
 def taxonomy() -> None:
     """Show the institution catalogue and validate the config."""
     tax = load_taxonomy()
-    table = Table(title=f"Institutions (taxonomy v{tax.version})")
-    table.add_column("id", style="cyan", no_wrap=True)
-    table.add_column("الجهة", justify="right")
-    table.add_column("english")
-    for inst in tax.institutions:
-        table.add_row(inst.id, inst.name_ar, inst.name_en)
-    console.print(table)
+    console.print(reporting.institutions_table(tax))
     console.print(f"classes: {len(tax.institutions)}   fallback: {tax.fallback_id}")
     console.print(f"declared confusion pairs: {len(tax.confusion_pairs)}")
 
@@ -112,8 +131,7 @@ def generate(
     mockdata.save_jsonl(docs, out)
     scanned = sum(1 for d in docs if d.source == "ocr")
     console.print(
-        f"[green]Wrote {len(docs)} documents[/green] to {out} "
-        f"({scanned} carry simulated OCR noise)"
+        f"[green]Wrote {len(docs)} documents[/green] to {out} ({scanned} carry simulated OCR noise)"
     )
     if as_files:
         directory = mockdata.save_as_files(docs, DATA / "generated" / "files")
@@ -152,54 +170,39 @@ def classify(
         console.print("[yellow]No documents found.[/yellow]")
         raise typer.Exit(1)
 
+    example_set = None
+    if examples:
+        from . import fewshot
+
+        example_set = fewshot.load(examples)
+        leaked = fewshot.check_leakage(example_set, docs)
+        if leaked:
+            # Scoring a model on documents sitting in its own prompt inflates
+            # the result, so this is worth shouting about.
+            console.print(
+                f"[yellow]{len(leaked)} document(s) are in both the example "
+                "set and this run — their scores are not meaningful. "
+                "Exclude them before quoting any accuracy.[/yellow]"
+            )
+        console.print(f"using {len(example_set.examples)} few-shot example(s) from {examples}")
+
     if backend == "llm":
         _require_key()
-        example_set = None
-        if examples:
-            from . import fewshot
 
-            example_set = fewshot.load(examples)
-            leaked = fewshot.check_leakage(example_set, docs)
-            if leaked:
-                # Scoring a model on documents sitting in its own prompt
-                # inflates the result, so this is an error worth shouting about.
-                console.print(
-                    f"[yellow]{len(leaked)} document(s) are in both the example "
-                    "set and this run — their scores are not meaningful. "
-                    "Exclude them before quoting any accuracy.[/yellow]"
-                )
-            console.print(
-                f"using {len(example_set.examples)} few-shot example(s) from {examples}"
-            )
-        clf = LLMClassifier(
-            taxonomy=tax, model=model, effort=effort,
-            review_threshold=threshold, examples=example_set,
-        )
-    elif backend == "baseline":
-        model_path = MODELS / "baseline.joblib"
-        if not model_path.exists():
-            console.print(
-                f"[red]No trained baseline at {model_path}.[/red] "
-                "Run `docrouter train-baseline` first."
-            )
-            raise typer.Exit(1)
-        clf = BaselineClassifier(taxonomy=tax, review_threshold=threshold).load(model_path)
-    else:
-        console.print(f"[red]unknown backend {backend!r}[/red]")
-        raise typer.Exit(1)
+    clf = _make_classifier(
+        backend,
+        taxonomy=tax,
+        model=model,
+        effort=effort,
+        review_threshold=threshold,
+        examples=example_set,
+        model_path=MODELS / "baseline.joblib",
+    )
 
     with console.status(f"Classifying {len(docs)} document(s) via {clf.name}..."):
         predictions = clf.classify_many(docs)
 
-    table = Table(title="Routing")
-    table.add_column("doc", style="cyan", no_wrap=True)
-    table.add_column("الجهة", justify="right")
-    table.add_column("conf", justify="right")
-    table.add_column("")
-    for p in predictions[:40]:
-        flag = "[yellow]مراجعة[/yellow]" if p.needs_review else ""
-        table.add_row(p.doc_id, tax.name_ar(p.institution_id), f"{p.confidence:.2f}", flag)
-    console.print(table)
+    console.print(reporting.routing_table(predictions, tax))
     if len(predictions) > 40:
         console.print(f"... and {len(predictions) - 40} more")
 
@@ -264,19 +267,7 @@ def evaluate(
     for line in report.summary_lines(tax):
         console.print(line)
 
-    table = Table(title="Per class")
-    table.add_column("institution", style="cyan")
-    table.add_column("n", justify="right")
-    table.add_column("P", justify="right")
-    table.add_column("R", justify="right")
-    table.add_column("F1", justify="right")
-    for m in sorted(report.per_class, key=lambda m: m.f1):
-        if m.support:
-            table.add_row(
-                m.institution_id, str(m.support),
-                f"{m.precision:.2f}", f"{m.recall:.2f}", f"{m.f1:.2f}",
-            )
-    console.print(table)
+    console.print(reporting.per_class_table(report))
 
     if show_confusion:
         for gold, row in sorted(report.confusion.items()):
@@ -298,10 +289,14 @@ def batch_submit(
 ) -> None:
     """Submit a dataset to the Batches API and print the batch id."""
     _require_key()
-    docs = mockdata.load_jsonl(dataset) if dataset.suffix == ".jsonl" else ingest.load_directory(dataset)
+    docs = (
+        mockdata.load_jsonl(dataset)
+        if dataset.suffix == ".jsonl"
+        else ingest.load_directory(dataset)
+    )
     if limit:
         docs = docs[:limit]
-    clf = LLMClassifier(model=model, effort=effort)
+    clf = _make_batch_classifier("llm", model=model, effort=effort)
     batch_id = clf.submit_batch(docs)
     console.print(f"[green]Submitted {len(docs)} documents.[/green]")
     console.print(f"batch id: [cyan]{batch_id}[/cyan]")
@@ -315,7 +310,7 @@ def batch_collect(
 ) -> None:
     """Check a batch and write its predictions once it has ended."""
     _require_key()
-    clf = LLMClassifier()
+    clf = _make_batch_classifier("llm")
     status = clf.batch_status(batch_id)
     console.print(f"status: {status.processing_status}")
     if status.processing_status != "ended":
@@ -326,7 +321,9 @@ def batch_collect(
     _write_predictions(predictions, out)
     console.print(f"[green]Wrote {len(predictions)} predictions[/green] to {out}")
     if errors:
-        console.print(f"[yellow]{len(errors)} failed:[/yellow] {json.dumps(errors, ensure_ascii=False)[:400]}")
+        console.print(
+            f"[yellow]{len(errors)} failed:[/yellow] {json.dumps(errors, ensure_ascii=False)[:400]}"
+        )
 
 
 @app.command("threshold")
@@ -345,14 +342,18 @@ def threshold_sweep(
     """Sweep the auto-route cut-off and recommend one."""
     from .models import Prediction
     from .threshold import (
-        calibration, per_class_thresholds, recommend_for_target,
-        recommend_min_cost, split_validate, sweep,
+        calibration,
+        per_class_thresholds,
+        recommend_for_target,
+        recommend_min_cost,
+        split_validate,
+        sweep,
     )
 
     tax = load_taxonomy()
     docs = mockdata.load_jsonl(dataset)
     with predictions.open(encoding="utf-8") as fh:
-        preds = [Prediction.model_validate_json(l) for l in fh if l.strip()]
+        preds = [Prediction.model_validate_json(line) for line in fh if line.strip()]
 
     # --- is the confidence score worth thresholding at all? ---
     cal = calibration(docs, preds)
@@ -367,48 +368,14 @@ def threshold_sweep(
             "unreliable. Fix calibration before trusting a threshold.[/yellow]"
         )
 
-    bins = Table(title="Reliability")
-    bins.add_column("confidence", style="cyan")
-    bins.add_column("n", justify="right")
-    bins.add_column("predicted", justify="right")
-    bins.add_column("actual", justify="right")
-    bins.add_column("gap", justify="right")
-    for b in cal.bins:
-        colour = "green" if abs(b.gap) < 0.1 else "yellow"
-        bins.add_row(
-            f"{b.low:.1f}-{b.high:.1f}", str(b.n),
-            f"{b.mean_confidence:.2f}", f"{b.accuracy:.2f}",
-            f"[{colour}]{b.gap:+.2f}[/{colour}]",
-        )
-    console.print(bins)
+    console.print(reporting.reliability_table(cal))
 
     # --- the sweep ---
     points = sweep(docs, preds, misroute_cost=misroute_cost, review_cost=review_cost)
     cheapest = recommend_min_cost(points)
     on_target = recommend_for_target(points, target_auto_accuracy)
 
-    table = Table(title=f"Threshold sweep (n={points[0].auto_routed + points[0].held})")
-    table.add_column("t", justify="right", style="cyan")
-    table.add_column("auto", justify="right")
-    table.add_column("coverage", justify="right")
-    table.add_column("auto acc", justify="right")
-    table.add_column("misrouted", justify="right")
-    table.add_column("held", justify="right")
-    table.add_column("cost", justify="right")
-    table.add_column("pick", no_wrap=True)
-    for p in points:
-        marks = []
-        if on_target and p.threshold == on_target.threshold:
-            marks.append("[green]target[/green]")
-        if p.threshold == cheapest.threshold:
-            marks.append("[magenta]cheapest[/magenta]")
-        table.add_row(
-            f"{p.threshold:.2f}", str(p.auto_routed), f"{p.coverage:.0%}",
-            f"{p.auto_accuracy:.1%}" if p.defined else "—",
-            f"{p.misrouted}", str(p.held), f"{p.expected_cost:.0f}",
-            " · ".join(marks),
-        )
-    console.print(table)
+    console.print(reporting.sweep_table(points, on_target, cheapest))
 
     console.print("[bold]Recommendation[/bold]")
     if on_target:
@@ -432,8 +399,11 @@ def threshold_sweep(
     validation = None
     if validate:
         validation = split_validate(
-            docs, preds, target_auto_accuracy=target_auto_accuracy,
-            misroute_cost=misroute_cost, review_cost=review_cost,
+            docs,
+            preds,
+            target_auto_accuracy=target_auto_accuracy,
+            misroute_cost=misroute_cost,
+            review_cost=review_cost,
         )
         console.print("")
         console.print("[bold]Held-out check[/bold]")
@@ -458,20 +428,7 @@ def threshold_sweep(
         per_class_rows = per_class_thresholds(
             docs, preds, target_auto_accuracy=target_auto_accuracy, taxonomy=tax
         )
-        pc = Table(title=f"Per-class cut-offs (target {target_auto_accuracy:.0%})")
-        pc.add_column("institution", style="cyan")
-        pc.add_column("n", justify="right")
-        pc.add_column("t", justify="right")
-        pc.add_column("coverage", justify="right")
-        pc.add_column("")
-        for row in per_class_rows:
-            pc.add_row(
-                row.institution_id, str(row.support),
-                f"{row.threshold:.2f}" if row.threshold is not None else "[red]none[/red]",
-                f"{row.coverage:.0%}" if row.threshold is not None else "—",
-                "[yellow]thin[/yellow]" if row.thin else "",
-            )
-        console.print(pc)
+        console.print(reporting.class_thresholds_table(per_class_rows, target_auto_accuracy))
         console.print(
             "  [dim]'thin' means too few documents to set a trustworthy cut-off; "
             "fall back to the global one there.[/dim]"
@@ -534,9 +491,7 @@ def label_prelabel(
         docs = [ingest.load_document(path, ocr_backend=ocr)]
 
     fresh = [d for d in docs if d.doc_id not in done]
-    console.print(
-        f"ingested {len(docs)} document(s); {len(fresh)} not yet reviewed"
-    )
+    console.print(f"ingested {len(docs)} document(s); {len(fresh)} not yet reviewed")
     if not fresh:
         console.print("[yellow]Nothing left to review.[/yellow]")
         raise typer.Exit(0)
@@ -544,16 +499,12 @@ def label_prelabel(
     predictions = None
     baseline_predictions = None
 
-    if backend == "llm":
-        _require_key()
-        clf = LLMClassifier(taxonomy=tax)
+    if backend != "none":
+        if backend == "llm":
+            _require_key()
+        clf = _make_classifier(backend, taxonomy=tax, model_path=MODELS / "baseline.joblib")
         with console.status(f"Pre-labeling {len(fresh)} document(s) with {clf.name}..."):
             predictions = clf.classify_many(fresh)
-    elif backend == "baseline":
-        predictions = _load_baseline(tax).classify_many(fresh)
-    elif backend != "none":
-        console.print(f"[red]unknown backend {backend!r}[/red]")
-        raise typer.Exit(1)
 
     if compare_baseline and backend == "llm":
         model_path = MODELS / "baseline.joblib"
@@ -580,7 +531,9 @@ def label_prelabel(
 
     lanes = Counter(i.lane for i in items)
     console.print(f"[green]Queued {len(items)} document(s)[/green] to {out}")
-    console.print(f"  priority lane: {lanes.get('priority', 0)}   random lane: {lanes.get('random', 0)}")
+    console.print(
+        f"  priority lane: {lanes.get('priority', 0)}   random lane: {lanes.get('random', 0)}"
+    )
     console.print("review with: docrouter label review")
 
 
@@ -613,8 +566,12 @@ def label_review(
     console.print(f"[green]Serving {len(items)} document(s)[/green] at http://127.0.0.1:{port}/")
     console.print("Loopback only — no document leaves this machine. Ctrl+C to stop.")
     serve(
-        items, store, reviewer=reviewer, port=port,
-        blind_random=blind_random, open_browser=open_browser,
+        items,
+        store,
+        reviewer=reviewer,
+        port=port,
+        blind_random=blind_random,
+        open_browser=open_browser,
     )
     console.print("\n[green]Session ended.[/green] Run `docrouter label status` for totals.")
 
@@ -635,9 +592,7 @@ def label_status(
         raise typer.Exit(0)
 
     console.print(f"records (incl. corrections): {stats.total_records}")
-    console.print(
-        f"labeled: {stats.labeled}   skipped: {stats.skipped}   unclear: {stats.unclear}"
-    )
+    console.print(f"labeled: {stats.labeled}   skipped: {stats.skipped}   unclear: {stats.unclear}")
     if stats.median_seconds:
         console.print(f"median time per document: {stats.median_seconds:.0f}s")
 
@@ -656,8 +611,7 @@ def label_status(
             )
     else:
         console.print(
-            "  random lane   : [dim]no data yet[/dim]"
-            "   <- the honest estimate comes from here"
+            "  random lane   : [dim]no data yet[/dim]   <- the honest estimate comes from here"
         )
 
     if stats.priority.n:
@@ -668,19 +622,7 @@ def label_status(
     else:
         console.print("  priority lane : [dim]no data yet[/dim]")
 
-    table = Table(title=f"Coverage (target {target_per_class}/class)")
-    table.add_column("institution", style="cyan")
-    table.add_column("الجهة", justify="right")
-    table.add_column("have", justify="right")
-    table.add_column("need", justify="right")
-    for institution_id in tax.ids:
-        have = stats.per_class.get(institution_id, 0)
-        need = max(0, target_per_class - have)
-        table.add_row(
-            institution_id, tax.name_ar(institution_id), str(have),
-            "[green]0[/green]" if not need else f"[yellow]{need}[/yellow]",
-        )
-    console.print(table)
+    console.print(reporting.coverage_table(stats, tax, target_per_class))
 
     if stats.reviewers:
         console.print("reviewers: " + ", ".join(f"{k} ({v})" for k, v in stats.reviewers.items()))
@@ -688,9 +630,7 @@ def label_status(
 
 @label_app.command("export")
 def label_export(
-    source: Path = typer.Argument(
-        ..., help="folder or .jsonl the documents were ingested from"
-    ),
+    source: Path = typer.Argument(..., help="folder or .jsonl the documents were ingested from"),
     labels: Path = typer.Option(LABELS),
     out: Path = typer.Option(DATA / "gold" / "gold.jsonl"),
     ocr: str = typer.Option("claude"),
@@ -771,24 +711,26 @@ def prompt_build(
         with predictions.open(encoding="utf-8") as fh:
             model_labels = {
                 p.doc_id: p.institution_id
-                for p in (Prediction.model_validate_json(l) for l in fh if l.strip())
+                for p in (Prediction.model_validate_json(line) for line in fh if line.strip())
             }
 
     example_set = fewshot.select_examples(
-        docs, gold, model_labels=model_labels, taxonomy=tax,
-        per_class=per_class, max_examples=max_examples,
-        max_chars=max_chars, do_redact=redact,
+        docs,
+        gold,
+        model_labels=model_labels,
+        taxonomy=tax,
+        per_class=per_class,
+        max_examples=max_examples,
+        max_chars=max_chars,
+        do_redact=redact,
     )
     fewshot.save(example_set, out)
 
     overrides = sum(1 for e in example_set.examples if e.is_override)
     covered = len(example_set.per_class())
+    console.print(f"[green]Selected {len(example_set.examples)} example(s)[/green] to {out}")
     console.print(
-        f"[green]Selected {len(example_set.examples)} example(s)[/green] to {out}"
-    )
-    console.print(
-        f"  covering {covered}/{len(tax.ids)} institutions; "
-        f"{overrides} are human corrections"
+        f"  covering {covered}/{len(tax.ids)} institutions; {overrides} are human corrections"
     )
     if not redact:
         console.print(
@@ -798,7 +740,7 @@ def prompt_build(
     missing = [i for i in tax.ids if i not in example_set.per_class()]
     if missing:
         console.print(f"  [yellow]no example yet for:[/yellow] {', '.join(missing)}")
-    console.print(f"inspect with: docrouter prompt show")
+    console.print("inspect with: docrouter prompt show")
 
 
 @prompt_app.command("show")
@@ -820,49 +762,37 @@ def prompt_show(
     base = SYSTEM_PREAMBLE + tax.render_for_prompt()
     block = fewshot.render(example_set, tax)
 
-    table = Table(title=f"Few-shot examples ({len(example_set.examples)})")
-    table.add_column("doc", style="cyan", no_wrap=True)
-    table.add_column("الجهة", justify="right")
-    table.add_column("chars", justify="right")
-    table.add_column("")
-    for e in example_set.examples:
-        flags = []
-        if e.is_override:
-            flags.append(f"[yellow]صُحح من {e.corrected_from}[/yellow]")
-        if e.truncated:
-            flags.append("[dim]مقتطع[/dim]")
-        table.add_row(e.doc_id, tax.name_ar(e.label), str(len(e.text)), " ".join(flags))
-    console.print(table)
+    console.print(reporting.examples_table(example_set, tax))
 
     console.print(f"base prompt    : {len(base):,} chars")
-    console.print(f"examples block : {len(block):,} chars (+{len(block)/max(len(base),1):.0%})")
+    console.print(f"examples block : {len(block):,} chars (+{len(block) / max(len(base), 1):.0%})")
 
     if count_tokens:
         _require_key()
         import anthropic
 
         client = anthropic.Anthropic()
-        probe = [{"role": "user", "content": "x"}]
+        # A one-token user turn, so the delta measured is the system prompt.
+        probe: list[anthropic.types.MessageParam] = [{"role": "user", "content": "x"}]
         without = client.messages.count_tokens(
             model=os.environ.get("DOCROUTER_MODEL", "claude-opus-5"),
-            system=base, messages=probe,
+            system=base,
+            messages=probe,
         ).input_tokens
         with_examples = client.messages.count_tokens(
             model=os.environ.get("DOCROUTER_MODEL", "claude-opus-5"),
-            system=base + block, messages=probe,
+            system=base + block,
+            messages=probe,
         ).input_tokens
         console.print(
-            f"tokens         : {without:,} -> {with_examples:,} "
-            f"(+{with_examples - without:,})"
+            f"tokens         : {without:,} -> {with_examples:,} (+{with_examples - without:,})"
         )
         console.print(
             "[dim]Cached after the first call, so this is paid once per cache "
             "window, not per document.[/dim]"
         )
     else:
-        console.print(
-            "[dim]Pass --count-tokens for an exact count (needs an API key).[/dim]"
-        )
+        console.print("[dim]Pass --count-tokens for an exact count (needs an API key).[/dim]")
 
     if full:
         console.print("")

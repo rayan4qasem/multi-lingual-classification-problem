@@ -1,5 +1,10 @@
 # docrouter — تصنيف وتوجيه الوثائق الحكومية
 
+[![CI](https://github.com/rayan4qasem/multi-lingual-classification-problem/actions/workflows/ci.yml/badge.svg)](https://github.com/rayan4qasem/multi-lingual-classification-problem/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%20|%203.12%20|%203.13-blue)](https://www.python.org/)
+[![Checked with mypy](https://img.shields.io/badge/mypy-checked-2a6db2)](https://mypy-lang.org/)
+[![Ruff](https://img.shields.io/badge/lint-ruff-d7ff64)](https://docs.astral.sh/ruff/)
+
 Routes Arabic government documents to the Saudi institution responsible for
 handling them: police, health, courts, prosecution, tax, municipal, and so on.
 
@@ -86,6 +91,59 @@ Prediction                 institution_id · confidence · rationale_ar · alter
 | `labeling/store.py` | Append-only label store. Decisions only, no text. |
 | `labeling/prioritize.py` | Builds the review batch: priority lane + random lane. |
 | `labeling/review.py` | Local, loopback-only review UI (RTL, keyboard-driven). |
+
+## Architecture
+
+The swappable parts are defined as `typing.Protocol` contracts in
+[`protocols.py`](src/docrouter/protocols.py) — structural, so an implementation
+never has to import or subclass anything from this package.
+
+**Two registries carry the extensibility.** `ExtractorRegistry` maps file
+suffixes to extractors and `OcrRegistry` maps names to OCR backends, so adding
+a format or a transcription engine is a registration rather than an edit to a
+dispatch chain. `ClassifierRegistry` does the same for backends — an on-prem
+fine-tune would register alongside `llm` and `baseline` without the CLI
+changing. Tests register throwaway implementations at runtime to prove it.
+
+**The classifier contract is split deliberately.** `Classifier` is the narrow
+interface every backend satisfies; `BatchClassifier` adds the Batches API. The
+offline baseline has no notion of an async batch, and is not made to grow stub
+methods to satisfy one fat interface — it simply is not a `BatchClassifier`,
+and `docrouter batch` checks for the narrower type rather than assuming it.
+
+**Policies are injected, not hardcoded.** `PdfExtractor(is_usable=...)` decides
+whether a page's text layer is good enough; the default requires real Arabic,
+but "usable" is a deployment policy and a bilingual archive would want another.
+The Claude OCR backend takes its client rather than constructing one, so no API
+object exists until a document actually needs transcribing.
+
+**Rendering is separate from the CLI.** [`reporting.py`](src/docrouter/reporting.py)
+takes domain objects and returns Rich tables — no I/O, no `sys.exit`, no Typer.
+That is why the tables are unit-tested without invoking a command.
+
+## Development
+
+```bash
+uv pip install -e ".[dev]"
+```
+
+```bash
+ruff check . && ruff format --check . && mypy && pytest --cov
+```
+
+CI runs on every push and pull request:
+
+| job | does |
+|---|---|
+| **lint & types** | `ruff check`, `ruff format --check`, `mypy` |
+| **tests** | pytest on Python 3.11 / 3.12 / 3.13 × Ubuntu / Windows, coverage gate at 85% |
+| **cli smoke** | drives the whole offline pipeline end to end with no API key |
+| **secrets** | fails if a credential or a real document is ever committed |
+
+Windows is a first-class target in the matrix — it is where this runs today,
+and the reason OCR defaults to a backend needing no external binaries. The
+test suite sets `ANTHROPIC_API_KEY` to empty in CI, so any test that starts
+reaching for the network fails loudly instead of silently costing money.
 
 ## Design decisions worth knowing
 

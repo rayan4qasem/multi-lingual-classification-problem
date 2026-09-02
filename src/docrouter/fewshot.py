@@ -29,7 +29,8 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from .models import Document
-from .taxonomy import Taxonomy, load as load_taxonomy
+from .taxonomy import Taxonomy
+from .taxonomy import load as load_taxonomy
 
 # Ordered: the specific patterns must win before the generic digit-run rule.
 _REDACTIONS: list[tuple[re.Pattern[str], str]] = [

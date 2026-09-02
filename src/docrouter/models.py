@@ -54,9 +54,7 @@ class LLMClassification(BaseModel):
     institution_id: str = Field(
         description="معرّف الجهة الأنسب من القائمة المعطاة، بالإنجليزية كما هو"
     )
-    confidence: float = Field(
-        ge=0.0, le=1.0, description="ثقة القرار من 0 إلى 1"
-    )
+    confidence: float = Field(ge=0.0, le=1.0, description="ثقة القرار من 0 إلى 1")
     rationale_ar: str = Field(
         description="سبب مختصر بالعربية في جملة أو جملتين، مستنداً إلى نص الوثيقة"
     )

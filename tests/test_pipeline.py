@@ -171,8 +171,11 @@ def test_evaluate_separates_auto_from_held():
     preds = [
         Prediction(doc_id="a", institution_id="moh_health", confidence=0.9, backend="t"),
         Prediction(
-            doc_id="b", institution_id="moh_health", confidence=0.2,
-            needs_review=True, backend="t",
+            doc_id="b",
+            institution_id="moh_health",
+            confidence=0.2,
+            needs_review=True,
+            backend="t",
         ),
     ]
     report = evaluate(docs, preds)

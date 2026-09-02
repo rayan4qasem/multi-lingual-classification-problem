@@ -31,7 +31,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 
 from .. import normalize
 from ..models import Document, Prediction
-from ..taxonomy import Taxonomy, load as load_taxonomy
+from ..taxonomy import Taxonomy
+from ..taxonomy import load as load_taxonomy
+from .store import Lane
 
 
 class Weights(BaseModel):
@@ -47,7 +49,9 @@ class Weights(BaseModel):
 class QueueItem(BaseModel):
     doc_id: str
     text: str
-    lane: str = "priority"
+    # Constrained, not free text: the lane decides how the document is served
+    # in review and how its agreement is interpreted afterwards.
+    lane: Lane = "priority"
     score: float = 0.0
     reasons: list[str] = Field(default_factory=list)
 
@@ -148,7 +152,7 @@ def build_queue(
     if not pool:
         return []
 
-    def make_item(doc: Document, lane: str, score: float, reasons: list[str]) -> QueueItem:
+    def make_item(doc: Document, lane: Lane, score: float, reasons: list[str]) -> QueueItem:
         pred = by_id.get(doc.doc_id)
         base = base_by_id.get(doc.doc_id)
         return QueueItem(
@@ -168,7 +172,7 @@ def build_queue(
         )
 
     # --- random lane first, so it is never crowded out by the ranking ---
-    n_random = min(len(pool), int(round(size * random_ratio)))
+    n_random = min(len(pool), round(size * random_ratio))
     random_docs = rng.sample(pool, n_random) if n_random else []
     random_ids = {d.doc_id for d in random_docs}
     items = [make_item(d, "random", 0.0, ["عينة عشوائية"]) for d in random_docs]
@@ -193,7 +197,10 @@ def build_queue(
         candidates = sorted(range(len(scored)), key=lambda i: -scored[i][0])
 
         while len(items) < size and candidates:
-            best_i, best_adjusted = None, None
+            # Greedy pick: highest score after penalising similarity to what
+            # has already been chosen, so near-duplicates do not stack up.
+            best_i = candidates[0]
+            best_adjusted = float("-inf")
             for i in candidates:
                 score, _, doc = scored[i]
                 adjusted = score
@@ -203,20 +210,22 @@ def build_queue(
                         for j in chosen
                     )
                     adjusted -= weights.redundancy_penalty * float(redundancy)
-                if best_adjusted is None or adjusted > best_adjusted:
+                if adjusted > best_adjusted:
                     best_i, best_adjusted = i, adjusted
 
             score, reasons, doc = scored[best_i]
             candidates.remove(best_i)
 
-            label = by_id.get(doc.doc_id).institution_id if doc.doc_id in by_id else "?"
+            prediction = by_id.get(doc.doc_id)
+            label = prediction.institution_id if prediction is not None else "?"
             if per_class_cap is not None and per_class.get(label, 0) >= per_class_cap:
                 continue
             per_class[label] = per_class.get(label, 0) + 1
 
             chosen.append(best_i)
-            if similarity is not None and len(chosen) > 1:
-                reasons = reasons + ["مختار لتنويع الدفعة"] if not reasons else reasons
+            if not reasons and similarity is not None and len(chosen) > 1:
+                # Nothing else flagged it; it earned its slot on diversity.
+                reasons = ["مختار لتنويع الدفعة"]
             items.append(make_item(doc, "priority", score, reasons))
 
     # Interleave so a reviewer meets both lanes throughout the session rather

@@ -14,7 +14,8 @@ from collections import Counter, defaultdict
 from pydantic import BaseModel, Field
 
 from .models import Document, Prediction
-from .taxonomy import Taxonomy, load as load_taxonomy
+from .taxonomy import Taxonomy
+from .taxonomy import load as load_taxonomy
 
 
 class ClassMetrics(BaseModel):
@@ -47,7 +48,7 @@ class Report(BaseModel):
             f"backend            : {self.backend}",
             f"documents          : {self.total}",
             f"accuracy (all)     : {self.accuracy:.1%}",
-            f"auto-routed        : {self.auto_routed} ({self.auto_routed / max(self.total,1):.0%})",
+            f"auto-routed        : {self.auto_routed} ({self.auto_routed / max(self.total, 1):.0%})",
             f"accuracy (auto)    : {self.auto_accuracy:.1%}",
             f"held for review    : {self.held_for_review}"
             f"  (of which {self.review_would_have_been_correct} were already correct)",
@@ -57,9 +58,7 @@ class Report(BaseModel):
         ]
         if self.confusion_pair_errors:
             lines.append("known confusion pairs:")
-            for pair, count in sorted(
-                self.confusion_pair_errors.items(), key=lambda kv: -kv[1]
-            ):
+            for pair, count in sorted(self.confusion_pair_errors.items(), key=lambda kv: -kv[1]):
                 if count:
                     lines.append(f"  {pair}: {count}")
         return lines
@@ -148,8 +147,6 @@ def evaluate(
         per_class=per_class,
         confusion={k: dict(v) for k, v in confusion.items()},
         confusion_pair_errors=pair_errors,
-        mean_confidence_correct=(
-            sum(conf_correct) / len(conf_correct) if conf_correct else 0.0
-        ),
+        mean_confidence_correct=(sum(conf_correct) / len(conf_correct) if conf_correct else 0.0),
         mean_confidence_wrong=sum(conf_wrong) / len(conf_wrong) if conf_wrong else 0.0,
     )

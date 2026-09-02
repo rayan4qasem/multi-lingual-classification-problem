@@ -17,6 +17,7 @@ def _corpus(n=40):
 
 # ---------- redaction ----------
 
+
 def test_redacts_saudi_identifiers():
     text = (
         "رقم الهوية: 1042779318 والجوال 0553120944 "
@@ -24,8 +25,13 @@ def test_redacts_saudi_identifiers():
         "والرقم الضريبي 300442119800003 والبريد a.b@example.com"
     )
     out = fewshot.redact(text)
-    for secret in ("1042779318", "0553120944", "SA4420000001234567891234",
-                   "300442119800003", "a.b@example.com"):
+    for secret in (
+        "1042779318",
+        "0553120944",
+        "SA4420000001234567891234",
+        "300442119800003",
+        "a.b@example.com",
+    ):
         assert secret not in out
     assert "[رقم هوية]" in out and "[جوال]" in out
     assert "[آيبان]" in out and "[رقم ضريبي]" in out and "[بريد]" in out
@@ -44,6 +50,7 @@ def test_redaction_is_idempotent():
 
 
 # ---------- selection ----------
+
 
 def test_every_class_with_gold_gets_an_example():
     tax = taxonomy.load()
@@ -108,6 +115,7 @@ def test_empty_documents_are_skipped():
 
 # ---------- rendering and caching ----------
 
+
 def test_examples_block_is_byte_stable():
     # The block sits in the cached prompt prefix. If it varies between runs
     # the cache never hits and the per-document cost roughly triples.
@@ -171,6 +179,7 @@ def test_classifier_prefix_is_stable_across_construction():
 
 
 # ---------- leakage ----------
+
 
 def test_leakage_is_detected():
     docs = _corpus(20)

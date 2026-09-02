@@ -22,17 +22,24 @@ from sklearn.svm import LinearSVC
 
 from .. import normalize
 from ..models import Alternative, Document, Prediction
-from ..taxonomy import Taxonomy, load as load_taxonomy
+from ..taxonomy import Taxonomy
+from ..taxonomy import load as load_taxonomy
 
 
 def _build_pipeline() -> Pipeline:
     features = make_union(
         TfidfVectorizer(
-            analyzer="char_wb", ngram_range=(2, 5), min_df=2, max_features=200_000,
+            analyzer="char_wb",
+            ngram_range=(2, 5),
+            min_df=2,
+            max_features=200_000,
             sublinear_tf=True,
         ),
         TfidfVectorizer(
-            analyzer="word", ngram_range=(1, 2), min_df=2, max_features=100_000,
+            analyzer="word",
+            ngram_range=(1, 2),
+            min_df=2,
+            max_features=100_000,
             sublinear_tf=True,
         ),
     )
@@ -62,7 +69,7 @@ class BaselineClassifier:
 
     def fit(self, docs: list[Document]) -> None:
         labels = [d.true_label for d in docs]
-        if any(l is None for l in labels):
+        if any(label is None for label in labels):
             raise ValueError("every training document needs a true_label")
         texts = [normalize.aggressive(d.text) for d in docs]
         self.pipeline = _build_pipeline()
@@ -80,7 +87,7 @@ class BaselineClassifier:
         classes = self.pipeline.classes_
 
         predictions = []
-        for doc, row in zip(docs, probabilities):
+        for doc, row in zip(docs, probabilities, strict=True):
             order = np.argsort(row)[::-1]
             top = order[0]
             predictions.append(
@@ -90,9 +97,7 @@ class BaselineClassifier:
                     confidence=float(row[top]),
                     rationale_ar="تصنيف إحصائي دون تعليل",
                     alternatives=[
-                        Alternative(
-                            institution_id=str(classes[i]), confidence=float(row[i])
-                        )
+                        Alternative(institution_id=str(classes[i]), confidence=float(row[i]))
                         for i in order[1:3]
                     ],
                     needs_review=float(row[top]) < self.review_threshold,
@@ -106,6 +111,6 @@ class BaselineClassifier:
         path.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(self.pipeline, path)
 
-    def load(self, path: str | Path) -> "BaselineClassifier":
+    def load(self, path: str | Path) -> BaselineClassifier:
         self.pipeline = joblib.load(Path(path))
         return self

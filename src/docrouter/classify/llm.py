@@ -15,16 +15,18 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Iterable
+from collections.abc import Iterable
 
 import anthropic
 from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
 from anthropic.types.messages.batch_create_params import Request
 
 from .. import DEFAULT_MODEL
-from ..fewshot import ExampleSet, render as render_examples
+from ..fewshot import ExampleSet
+from ..fewshot import render as render_examples
 from ..models import Alternative, Document, LLMClassification, Prediction
-from ..taxonomy import Taxonomy, load as load_taxonomy
+from ..taxonomy import Taxonomy
+from ..taxonomy import load as load_taxonomy
 
 log = logging.getLogger(__name__)
 
@@ -54,6 +56,7 @@ SYSTEM_PREAMBLE = """\
 
 ## قائمة الجهات
 """
+
 
 # Hand-written rather than derived from the Pydantic model so that
 # `additionalProperties: false` and the enum of valid ids are guaranteed.
@@ -120,7 +123,7 @@ class LLMClassifier:
         effort: str | None = None,
         review_threshold: float = 0.55,
         client: anthropic.Anthropic | None = None,
-        examples: "ExampleSet | None" = None,
+        examples: ExampleSet | None = None,
     ):
         self.taxonomy = taxonomy or load_taxonomy()
         self.model = model or os.environ.get("DOCROUTER_MODEL", DEFAULT_MODEL)
@@ -203,7 +206,10 @@ class LLMClassifier:
             requests=[
                 Request(
                     custom_id=doc.doc_id,
-                    params=MessageCreateParamsNonStreaming(
+                    # model and max_tokens arrive via **kwargs from
+                    # _request_kwargs(); mypy cannot see through the spread
+                    # into the TypedDict's required keys.
+                    params=MessageCreateParamsNonStreaming(  # type: ignore[typeddict-item]
                         **kwargs,
                         messages=[{"role": "user", "content": _user_content(doc)}],
                     ),

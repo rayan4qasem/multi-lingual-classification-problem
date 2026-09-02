@@ -21,3 +21,8 @@ data/gold/
 # Few-shot example sets embed (redacted) document text and are sent to the
 # API on every request. Built locally from your own gold labels; not shared.
 data/prompt/
+
+# Coverage artifacts
+.coverage
+coverage.xml
+htmlcov/

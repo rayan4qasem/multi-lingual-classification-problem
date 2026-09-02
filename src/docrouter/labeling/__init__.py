@@ -10,7 +10,7 @@ The loop:
 worth a human's attention. `review` serves the local adjudication UI.
 """
 
-from .store import LabelRecord, LabelStore
 from .prioritize import QueueItem, build_queue
+from .store import LabelRecord, LabelStore
 
 __all__ = ["LabelRecord", "LabelStore", "QueueItem", "build_queue"]

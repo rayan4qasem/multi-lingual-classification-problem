@@ -27,10 +27,11 @@ from __future__ import annotations
 import random
 from collections import defaultdict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from .models import Document, Prediction
-from .taxonomy import Taxonomy, load as load_taxonomy
+from .taxonomy import Taxonomy
+from .taxonomy import load as load_taxonomy
 
 DEFAULT_GRID = [round(0.05 * i, 2) for i in range(0, 21)]
 
@@ -87,9 +88,7 @@ class CalibrationReport(BaseModel):
         return "poorly calibrated (non-monotonic)"
 
 
-def _paired(
-    docs: list[Document], predictions: list[Prediction]
-) -> list[tuple[Prediction, bool]]:
+def _paired(docs: list[Document], predictions: list[Prediction]) -> list[tuple[Prediction, bool]]:
     """Pair each prediction with whether it was right. Unlabeled docs dropped."""
     truth = {d.doc_id: d.true_label for d in docs if d.true_label}
     out = []
@@ -237,8 +236,12 @@ def per_class_thresholds(
         if not entries:
             out.append(
                 ClassThreshold(
-                    institution_id=institution_id, support=0, threshold=None,
-                    coverage=0.0, auto_accuracy=0.0, thin=True,
+                    institution_id=institution_id,
+                    support=0,
+                    threshold=None,
+                    coverage=0.0,
+                    auto_accuracy=0.0,
+                    thin=True,
                 )
             )
             continue
@@ -250,9 +253,8 @@ def per_class_thresholds(
                 continue
             accuracy = sum(1 for _, ok in auto if ok) / len(auto)
             coverage = len(auto) / len(entries)
-            if accuracy >= target_auto_accuracy:
-                if best is None or coverage > best[1]:
-                    best = (threshold, coverage, accuracy)
+            if accuracy >= target_auto_accuracy and (best is None or coverage > best[1]):
+                best = (threshold, coverage, accuracy)
 
         out.append(
             ClassThreshold(
@@ -331,8 +333,11 @@ def split_validate(
         return None
 
     test_point = sweep(
-        test_docs, test_preds, [chosen.threshold],
-        misroute_cost=misroute_cost, review_cost=review_cost,
+        test_docs,
+        test_preds,
+        [chosen.threshold],
+        misroute_cost=misroute_cost,
+        review_cost=review_cost,
     )[0]
 
     return SplitValidation(
