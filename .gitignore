@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+data/generated/
+data/incoming/
+runs/
+models/*.joblib
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+
+# Review queues and gold sets embed full document text — keep real
+# citizen documents out of version control. The label store itself
+# (data/labels/labels.jsonl) holds decisions and file references only,
+# and is safe to commit if your policy allows it.
+data/labels/queue*.jsonl
+data/gold/

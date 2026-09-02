@@ -1,1 +1,274 @@
-# multi-lingual-classification-problem
+# docrouter — تصنيف وتوجيه الوثائق الحكومية
+
+Routes Arabic government documents to the Saudi institution responsible for
+handling them: police, health, courts, prosecution, tax, municipal, and so on.
+
+Handles mixed input — digital PDFs and DOCX go straight to text, scanned PDFs
+and images are OCR'd first. Classification runs on the Claude API with
+structured output constrained to the institution list, so the model cannot
+invent a destination that doesn't exist.
+
+## Status
+
+Working scaffold, end to end, on **mock data**. The taxonomy is real; the
+documents are synthetic. Before anyone quotes an accuracy number, it needs to
+be re-measured on real correspondence — see [Next steps](#next-steps).
+
+## Setup
+
+```bash
+uv venv --python 3.12
+uv pip install -e ".[dev]"
+```
+
+Set your key (`ANTHROPIC_API_KEY`), or copy `.env.example` to `.env`.
+
+## Quick start
+
+```bash
+docrouter taxonomy
+```
+
+```bash
+docrouter generate --engine curated
+```
+
+```bash
+docrouter train-baseline
+```
+
+```bash
+docrouter classify data/generated/mock.jsonl --backend llm --limit 25
+```
+
+```bash
+docrouter evaluate --show-confusion
+```
+
+## How it fits together
+
+```
+file (pdf/docx/image/txt)
+   │
+   ├─ ingest.py ──── digital text layer? ──── yes ──► text
+   │                        │
+   │                        no
+   │                        ▼
+   │                 rasterize @200dpi ──► OCR (Claude vision, or Tesseract)
+   ▼
+normalize.light()          strips diacritics, tatweel, presentation forms
+   │
+   ▼
+classify/llm.py            system prompt = taxonomy catalogue (cached)
+   │                       output constrained to a json_schema enum of ids
+   ▼
+Prediction                 institution_id · confidence · rationale_ar · alternatives
+   │
+   ├─ confidence ≥ threshold ──► routed automatically
+   └─ confidence <  threshold ──► held for human review
+```
+
+### The pieces
+
+| File | Does |
+|---|---|
+| `config/taxonomy.yaml` | The institution list. **Edit this first** — prompts, labels, mock data and metrics all derive from it. |
+| `taxonomy.py` | Loads and validates it; renders the catalogue block for the prompt. |
+| `ingest.py` | File → text. Per-page decision on whether OCR is needed. |
+| `normalize.py` | Two strengths: `light` for the LLM, `aggressive` for bag-of-words. |
+| `classify/llm.py` | Claude backend. Sync path and Batches path share one prompt. |
+| `classify/baseline.py` | TF-IDF + calibrated SVM. Offline reference point. |
+| `data/curated/` | 86 hand-authored Arabic documents, incl. 16 boundary cases. |
+| `mockdata.py` | Dataset engines — curated, template and LLM. |
+| `evaluate.py` | Scoring, with auto-routed vs held-for-review separated. |
+| `labeling/store.py` | Append-only label store. Decisions only, no text. |
+| `labeling/prioritize.py` | Builds the review batch: priority lane + random lane. |
+| `labeling/review.py` | Local, loopback-only review UI (RTL, keyboard-driven). |
+
+## Design decisions worth knowing
+
+**The taxonomy is config, not code.** Adding an institution is a YAML edit.
+Nothing downstream hardcodes an institution id.
+
+**Output is schema-constrained.** `institution_id` is a JSON-schema `enum` of
+the ids in the taxonomy, so the model physically cannot return a destination
+outside the list — no string matching on free text, no fuzzy id repair.
+
+**Confusion pairs are declared, not discovered.** `confusion_pairs` in the
+taxonomy feeds both the prompt (as explicit tie-breakers) and the eval report
+(as a targeted error count), so the pairs that actually matter — prosecution
+vs. courts, labour vs. GOSI, tax vs. commerce — are tracked directly rather
+than buried in a 14×14 matrix.
+
+**The prompt prefix is byte-stable and cached.** The catalogue is a single
+cached system block; per-document cost is roughly the document itself. There's
+a test asserting the block doesn't vary between calls, because a silent cache
+miss triples the bill without failing anything.
+
+**Accuracy is not the headline metric.** Misrouting a document to the wrong
+ministry costs much more than holding it for a clerk. `evaluate` reports
+accuracy over the *auto-routed* subset alongside overall accuracy, plus how
+many held documents would have been right anyway — that pair is what you tune
+the threshold against.
+
+**OCR defaults to Claude vision, not Tesseract.** No external binaries (a real
+constraint on Windows), and it handles Arabic ligatures and handwriting
+considerably better. Tesseract is available via `pip install '.[tesseract]'`
+if you need OCR to stay local.
+
+## Mock data
+
+Three engines, answering different questions:
+
+- **`--engine curated`** (default) — 86 hand-authored documents shipped in
+  `data/curated/`, written to read like real correspondence rather than drawn
+  from phrase pools. Covers all 14 institutions and includes **16 adversarial
+  boundary cases**, two per declared confusion pair, each labeled with the
+  institution that is actually competent while carrying the surface signals of
+  its partner. Free, offline, deterministic, no API key.
+- **`--engine template`** — combinatorial generator, unlimited volume. Use it
+  to exercise the plumbing. Its bodies come from per-institution pools, so
+  keyword models score unrealistically well; don't quote accuracy from it.
+- **`--engine llm`** — Claude writes fresh correspondence at whatever volume
+  you ask. Needs `ANTHROPIC_API_KEY`. Use it to scale the corpus up once the
+  curated set has told you the pipeline discriminates.
+
+### Is the curated set actually harder?
+
+`python scripts/corpus_difficulty.py` trains the offline baseline on the
+template corpus and applies it to each set:
+
+| evaluation | n | accuracy | macro F1 |
+|---|---:|---:|---:|
+| templates → templates (held out) | 81 | 100.0% | 1.000 |
+| templates → curated (all) | 86 | 82.6% | 0.830 |
+| templates → curated (**hard only**) | 44 | 65.9% | 0.640 |
+
+A keyword-ish model saturates on the templates and loses a third of its
+accuracy on the boundary cases — and its errors land on the pairs declared in
+the taxonomy (prosecution vs. police 3, labour vs. GOSI 2, tax vs. commerce
+2). That gap is the benchmark. A test asserts it stays there.
+
+`--hard-only` gives you just the 44 boundary documents:
+
+```bash
+docrouter generate --engine curated --hard-only --out data/generated/hard.jsonl
+```
+
+## Labeling real documents
+
+The loop that turns an unlabeled archive into ground truth:
+
+```
+real documents ──► prelabel ──► queue ──► review (local UI) ──► label store
+                      ▲                                              │
+                      └──────── retrain / re-prompt ◄──── export gold┘
+```
+
+```bash
+docrouter label prelabel ./incoming --size 50
+```
+
+```bash
+docrouter label review --reviewer "اسم المراجع"
+```
+
+```bash
+docrouter label status
+```
+
+```bash
+docrouter label export ./incoming
+```
+
+`export` writes a gold dataset that `evaluate` and `train-baseline` already
+consume, so the loop closes without any glue.
+
+### Two lanes, and why it matters
+
+**You should not label everything.** The model already gets the easy documents
+right; confirming them teaches nothing. The **priority lane** ranks candidates
+by how much a label would be worth — model uncertainty, a thin margin between
+top-1 and top-2, disagreement between the LLM and the offline baseline, and
+whether the top two form a confusion pair declared in the taxonomy. A
+diversity term stops the queue filling with fifty copies of the same form.
+
+But a queue ranked by difficulty is a **biased sample**, so agreement measured
+on it understates real accuracy. That is what the **random lane** is for: a
+uniform sample of the pool, sized by `--random-ratio` (default 20%). It is the
+only thing here that yields an honest accuracy estimate. Don't set it to zero.
+
+The dry run makes the gap concrete — same model, same session:
+
+| lane | agreement | reading |
+|---|---:|---|
+| random | 100% (n=10) | what the model actually does on representative mail |
+| priority | 53.6% (n=28) | the hard cases, which is the point of the lane |
+
+Report the random-lane number. `label status` prints it with a Wilson
+interval, because "100%" off ten documents is really 72–100%.
+
+### Anchoring
+
+Random-lane documents are served **blind**: the model's prediction is stripped
+from the payload server-side, not merely hidden in the page. A reviewer who
+never saw the suggestion cannot have been nudged into agreeing with it, which
+is what makes that lane a genuine independent measurement. The guess is
+revealed after the decision is recorded. `--no-blind-random` turns it off.
+
+### Privacy
+
+Real documents mean real citizen data, so:
+
+- The review UI is a **local** server bound to `127.0.0.1`. Nothing is
+  published, and there are no CDN or outbound requests in the page.
+- The label store records **decisions and file references, never document
+  text** — so it can be shared with an auditor without shipping the documents.
+- Review queues and gold sets *do* embed text and are gitignored.
+- Note that `--backend llm` and Claude-vision OCR send document content to the
+  API. Use `--backend baseline` or `--backend none` for material that must not
+  leave the network.
+
+### Cold start
+
+No API key and no trained model yet? `--backend none` builds a pure-random
+queue so labeling can begin immediately; the priority signals switch on as
+soon as there is a model to disagree with.
+
+## Cost
+
+The classifier defaults to `claude-opus-5`. For a high-volume archive sweep,
+two levers, in this order:
+
+1. `docrouter batch submit` — the Batches API is **50% cheaper** and returns
+   within the hour. This is the right path for anything non-interactive.
+2. `--effort low` — classification is a task where low effort usually holds
+   quality. Measure on a labeled slice before making it the default.
+
+Model choice is a third lever (`--model claude-sonnet-5`), but measure it
+against the same slice rather than assuming.
+
+## Tests
+
+```bash
+uv run pytest -q
+```
+
+Everything offline — no API calls, no key needed.
+
+## Next steps
+
+1. **Get real labeled documents.** Everything below depends on this. The
+   labeling loop above is built and tested; point `label prelabel` at a real
+   folder and start. Aim for ~25/class before trusting any per-class number.
+2. **Tune the review threshold** on that real slice — the 0.55 default is a
+   placeholder, not a finding. Once the gold set exists, sweep it against the
+   auto-routed accuracy that `evaluate` reports.
+3. **Verify OCR quality on real scans.** Simulated noise is not the same as a
+   1998 fax of a stamped form.
+4. **Confirm data residency.** Documents currently leave the network to reach
+   the API. If that is not acceptable for production, the backend is swappable
+   — `classify/baseline.py` already implements the same interface offline, and
+   a fine-tuned AraBERT/CAMeLBERT would slot in the same way.
+5. **Add the routing sink** — right now predictions go to JSONL. Where should
+   a routed document actually land?
