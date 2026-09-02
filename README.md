@@ -81,6 +81,7 @@ Prediction                 institution_id · confidence · rationale_ar · alter
 | `data/curated/` | 86 hand-authored Arabic documents, incl. 16 boundary cases. |
 | `mockdata.py` | Dataset engines — curated, template and LLM. |
 | `evaluate.py` | Scoring, with auto-routed vs held-for-review separated. |
+| `threshold.py` | Cut-off sweep, calibration check, held-out validation. |
 | `labeling/store.py` | Append-only label store. Decisions only, no text. |
 | `labeling/prioritize.py` | Builds the review batch: priority lane + random lane. |
 | `labeling/review.py` | Local, loopback-only review UI (RTL, keyboard-driven). |
@@ -154,6 +155,53 @@ the taxonomy (prosecution vs. police 3, labour vs. GOSI 2, tax vs. commerce
 ```bash
 docrouter generate --engine curated --hard-only --out data/generated/hard.jsonl
 ```
+
+## Choosing the threshold
+
+```bash
+docrouter threshold --dataset data/generated/curated.jsonl --predictions runs/preds.jsonl
+```
+
+The auto-route cut-off is the only knob that trades one harm for another, so
+it is set two ways rather than guessed:
+
+- **target mode** — `--target-auto-accuracy 0.95` finds the lowest cut-off
+  meeting that bar, so coverage is as high as the bar allows. If nothing
+  reaches it, that is reported as a real answer: the model cannot support
+  that SLA on this data at any threshold.
+- **cost mode** — `--misroute-cost 20 --review-cost 1` minimises expected
+  cost. This is where the asymmetry gets stated explicitly instead of hiding
+  inside a default.
+
+Two guards run alongside it:
+
+**Calibration.** A threshold on a confidence score is meaningless unless the
+score tracks reality. The command reports reliability bins and ECE first, and
+warns when confidence is not worth thresholding. On the shipped baseline it
+immediately catches that the model is badly *under*-confident (ECE 0.32 — it
+says 0.46 and is right 100% of the time), which is exactly the situation where
+a sensible-looking cut-off silently holds half the archive for no gain.
+
+**Held-out validation.** Picking a threshold on the same documents you measure
+it on flatters the result, so the cut-off is chosen on one half and reported
+on the other. The optimism gap is printed; on the baseline it is +8%.
+
+`--per-class` fits a cut-off per institution, which usually dominates a single
+global one — the model is not equally trustworthy everywhere. It needs enough
+labeled documents per class, and marks the ones too thin to trust.
+
+### What this found about the shipped default
+
+The `0.55` default the repo has been carrying is wrong for the baseline, and
+the sweep says so plainly:
+
+| threshold | coverage | auto accuracy | misrouted | held |
+|---:|---:|---:|---:|---:|
+| **0.40** | 57% | 98.0% | 1 | 37 |
+| 0.55 (old default) | 44% | 97.4% | 1 | 48 |
+
+0.55 holds eleven more documents to buy nothing. That is the placeholder the
+"Next steps" section warned about, caught by measurement rather than opinion.
 
 ## Labeling real documents
 

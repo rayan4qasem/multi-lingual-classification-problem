@@ -308,6 +308,172 @@ def batch_collect(
         console.print(f"[yellow]{len(errors)} failed:[/yellow] {json.dumps(errors, ensure_ascii=False)[:400]}")
 
 
+@app.command("threshold")
+def threshold_sweep(
+    dataset: Path = typer.Option(DATA / "generated" / "mock.jsonl", help="labeled documents"),
+    predictions: Path = typer.Option(RUNS / "predictions.jsonl"),
+    target_auto_accuracy: float = typer.Option(
+        0.95, help="required accuracy on anything auto-routed"
+    ),
+    misroute_cost: float = typer.Option(20.0, help="cost of one misrouted document"),
+    review_cost: float = typer.Option(1.0, help="cost of one human review"),
+    per_class: bool = typer.Option(False, help="also fit a cut-off per institution"),
+    validate: bool = typer.Option(True, help="pick on one half, verify on the other"),
+    out: Path = typer.Option(RUNS / "threshold.json"),
+) -> None:
+    """Sweep the auto-route cut-off and recommend one."""
+    from .models import Prediction
+    from .threshold import (
+        calibration, per_class_thresholds, recommend_for_target,
+        recommend_min_cost, split_validate, sweep,
+    )
+
+    tax = load_taxonomy()
+    docs = mockdata.load_jsonl(dataset)
+    with predictions.open(encoding="utf-8") as fh:
+        preds = [Prediction.model_validate_json(l) for l in fh if l.strip()]
+
+    # --- is the confidence score worth thresholding at all? ---
+    cal = calibration(docs, preds)
+    console.print("[bold]Calibration[/bold]")
+    console.print(
+        f"  mean confidence {cal.mean_confidence:.2f} vs accuracy {cal.accuracy:.2f}"
+        f"   ECE {cal.ece:.3f}  ->  [cyan]{cal.verdict}[/cyan]"
+    )
+    if cal.ece >= 0.15:
+        console.print(
+            "  [yellow]Confidence tracks reality poorly; any cut-off here is "
+            "unreliable. Fix calibration before trusting a threshold.[/yellow]"
+        )
+
+    bins = Table(title="Reliability")
+    bins.add_column("confidence", style="cyan")
+    bins.add_column("n", justify="right")
+    bins.add_column("predicted", justify="right")
+    bins.add_column("actual", justify="right")
+    bins.add_column("gap", justify="right")
+    for b in cal.bins:
+        colour = "green" if abs(b.gap) < 0.1 else "yellow"
+        bins.add_row(
+            f"{b.low:.1f}-{b.high:.1f}", str(b.n),
+            f"{b.mean_confidence:.2f}", f"{b.accuracy:.2f}",
+            f"[{colour}]{b.gap:+.2f}[/{colour}]",
+        )
+    console.print(bins)
+
+    # --- the sweep ---
+    points = sweep(docs, preds, misroute_cost=misroute_cost, review_cost=review_cost)
+    cheapest = recommend_min_cost(points)
+    on_target = recommend_for_target(points, target_auto_accuracy)
+
+    table = Table(title=f"Threshold sweep (n={points[0].auto_routed + points[0].held})")
+    table.add_column("t", justify="right", style="cyan")
+    table.add_column("auto", justify="right")
+    table.add_column("coverage", justify="right")
+    table.add_column("auto acc", justify="right")
+    table.add_column("misrouted", justify="right")
+    table.add_column("held", justify="right")
+    table.add_column("cost", justify="right")
+    table.add_column("pick", no_wrap=True)
+    for p in points:
+        marks = []
+        if on_target and p.threshold == on_target.threshold:
+            marks.append("[green]target[/green]")
+        if p.threshold == cheapest.threshold:
+            marks.append("[magenta]cheapest[/magenta]")
+        table.add_row(
+            f"{p.threshold:.2f}", str(p.auto_routed), f"{p.coverage:.0%}",
+            f"{p.auto_accuracy:.1%}" if p.defined else "—",
+            f"{p.misrouted}", str(p.held), f"{p.expected_cost:.0f}",
+            " · ".join(marks),
+        )
+    console.print(table)
+
+    console.print("[bold]Recommendation[/bold]")
+    if on_target:
+        console.print(
+            f"  target mode : [green]{on_target.threshold:.2f}[/green] — "
+            f"{on_target.auto_accuracy:.1%} accurate on {on_target.coverage:.0%} of "
+            f"documents, {on_target.misrouted} misrouted, {on_target.held} held"
+        )
+    else:
+        console.print(
+            f"  target mode : [red]no threshold reaches {target_auto_accuracy:.0%}[/red] "
+            "on this data — the model cannot support that SLA here at any cut-off"
+        )
+    console.print(
+        f"  cost mode   : [magenta]{cheapest.threshold:.2f}[/magenta] — "
+        f"expected cost {cheapest.expected_cost:.0f} "
+        f"(misroute={misroute_cost:g}, review={review_cost:g})"
+    )
+
+    # --- did the choice just fit this data? ---
+    validation = None
+    if validate:
+        validation = split_validate(
+            docs, preds, target_auto_accuracy=target_auto_accuracy,
+            misroute_cost=misroute_cost, review_cost=review_cost,
+        )
+        console.print("")
+        console.print("[bold]Held-out check[/bold]")
+        if validation is None:
+            console.print("  [yellow]Not enough labeled data to split.[/yellow]")
+        else:
+            console.print(
+                f"  picked {validation.chosen_threshold:.2f} on {validation.n_train} docs; "
+                f"on the {validation.n_test} it never saw: "
+                f"{validation.test_auto_accuracy:.1%} accurate at "
+                f"{validation.test_coverage:.0%} coverage "
+                f"({validation.test_misrouted} misrouted)"
+            )
+            if validation.optimism > 0.05:
+                console.print(
+                    f"  [yellow]Optimism {validation.optimism:+.1%} — the sweep "
+                    "flattered itself. Treat the headline as an upper bound.[/yellow]"
+                )
+
+    per_class_rows = None
+    if per_class:
+        per_class_rows = per_class_thresholds(
+            docs, preds, target_auto_accuracy=target_auto_accuracy, taxonomy=tax
+        )
+        pc = Table(title=f"Per-class cut-offs (target {target_auto_accuracy:.0%})")
+        pc.add_column("institution", style="cyan")
+        pc.add_column("n", justify="right")
+        pc.add_column("t", justify="right")
+        pc.add_column("coverage", justify="right")
+        pc.add_column("")
+        for row in per_class_rows:
+            pc.add_row(
+                row.institution_id, str(row.support),
+                f"{row.threshold:.2f}" if row.threshold is not None else "[red]none[/red]",
+                f"{row.coverage:.0%}" if row.threshold is not None else "—",
+                "[yellow]thin[/yellow]" if row.thin else "",
+            )
+        console.print(pc)
+        console.print(
+            "  [dim]'thin' means too few documents to set a trustworthy cut-off; "
+            "fall back to the global one there.[/dim]"
+        )
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "calibration": cal.model_dump() | {"verdict": cal.verdict},
+        "sweep": [p.model_dump() for p in points],
+        "recommended_target": on_target.model_dump() if on_target else None,
+        "recommended_cost": cheapest.model_dump(),
+        "validation": validation.model_dump() if validation else None,
+        "per_class": [r.model_dump() for r in per_class_rows] if per_class_rows else None,
+        "costs": {"misroute": misroute_cost, "review": review_cost},
+    }
+    out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    console.print(f"\n[green]Wrote sweep[/green] to {out}")
+    if on_target:
+        console.print(
+            f"apply it with: docrouter classify <path> --threshold {on_target.threshold:.2f}"
+        )
+
+
 LABELS = DATA / "labels" / "labels.jsonl"
 QUEUE = DATA / "labels" / "queue.jsonl"
 
