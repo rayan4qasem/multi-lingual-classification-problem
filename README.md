@@ -4,6 +4,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20|%203.12%20|%203.13-blue)](https://www.python.org/)
 [![Checked with mypy](https://img.shields.io/badge/mypy-checked-2a6db2)](https://mypy-lang.org/)
 [![Ruff](https://img.shields.io/badge/lint-ruff-d7ff64)](https://docs.astral.sh/ruff/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Routes Arabic government documents to the Saudi institution responsible for
 handling them: police, health, courts, prosecution, tax, municipal, and so on.
@@ -474,3 +475,7 @@ Everything offline — no API calls, no key needed.
    a fine-tuned AraBERT/CAMeLBERT would slot in the same way.
 5. **Add the routing sink** — right now predictions go to JSONL. Where should
    a routed document actually land?
+
+## License
+
+MIT — see [LICENSE](LICENSE).
