@@ -1,0 +1,534 @@
+<title>docrouter Build Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+:root{
+  --paper:#f8faf9; --card:#ffffff; --ink:#14201c; --muted:#5d6b66;
+  --faint:#8b9691; --rule:#dbe4e0; --rule-strong:#c3d1cb;
+  --accent:#1f5f4e; --accent-soft:#e6f0ec;
+  --warn:#9a3412; --warn-soft:#f8ebe4;
+  --note:#8a6d1f; --note-soft:#f7f1e0;
+  --quote:#f2f6f4;
+  --f-ui:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --f-ar:"Noto Naskh Arabic","Times New Roman",serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0d1512; --card:#141d19; --ink:#e4ece8; --muted:#9aaaa4;
+  --faint:#6f807a; --rule:#243029; --rule-strong:#33443c;
+  --accent:#6fbfa5; --accent-soft:#16302a;
+  --warn:#e08b63; --warn-soft:#31201a;
+  --note:#d4b264; --note-soft:#2d2718;
+  --quote:#101a17;
+}}
+:root[data-theme="dark"]{
+  --paper:#0d1512; --card:#141d19; --ink:#e4ece8; --muted:#9aaaa4;
+  --faint:#6f807a; --rule:#243029; --rule-strong:#33443c;
+  --accent:#6fbfa5; --accent-soft:#16302a;
+  --warn:#e08b63; --warn-soft:#31201a;
+  --note:#d4b264; --note-soft:#2d2718;
+  --quote:#101a17;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--f-ui);font-size:15.5px;line-height:1.72;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:860px;margin:0 auto;padding:0 22px 90px}
+.ar{font-family:var(--f-ar);direction:rtl;unicode-bidi:isolate}
+
+header{border-bottom:2px solid var(--accent);padding:44px 0 22px;margin-bottom:34px}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--accent);font-weight:600;margin:0 0 12px}
+h1{font-size:clamp(28px,4.6vw,40px);line-height:1.25;margin:0 0 14px;
+  font-weight:700;letter-spacing:-.02em;text-wrap:balance}
+.lede{font-size:17.5px;color:var(--muted);margin:0;max-width:62ch}
+
+h2{font-size:21px;font-weight:700;margin:0 0 6px;letter-spacing:-.01em;text-wrap:balance}
+h3{font-size:16px;font-weight:600;margin:26px 0 8px}
+section{margin:0 0 46px}
+.sdesc{color:var(--muted);margin:0 0 20px;max-width:64ch}
+p{max-width:66ch}
+code{font-family:var(--f-mono);font-size:13px;background:var(--accent-soft);
+  padding:1px 5px;border-radius:3px;color:var(--ink)}
+
+.figures{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:1px;background:var(--rule);border:1px solid var(--rule);
+  border-radius:6px;overflow:hidden;margin:0 0 26px}
+.fig{background:var(--card);padding:16px 18px}
+.fig b{display:block;font-size:27px;font-weight:700;line-height:1.2;
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.fig span{display:block;font-size:12.5px;color:var(--muted);margin-top:3px}
+.fig.hero b{color:var(--accent)}
+
+table{width:100%;border-collapse:collapse;font-size:14.5px;margin:0 0 14px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule);
+  vertical-align:top}
+th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);font-weight:600}
+td.n{text-align:right;font-variant-numeric:tabular-nums;
+  font-family:var(--f-mono);font-size:13.5px}
+td.mono{font-family:var(--f-mono);font-size:13px;white-space:nowrap}
+tr.em td{font-weight:600}
+tr.em td.n{color:var(--accent)}
+.tablewrap{overflow-x:auto;margin-bottom:8px}
+caption{caption-side:bottom;text-align:left;font-size:13px;color:var(--faint);
+  padding-top:8px}
+
+.decision{background:var(--card);border:1px solid var(--rule);
+  border-left:3px solid var(--accent);border-radius:5px;
+  padding:16px 18px;margin:0 0 13px}
+.decision h3{margin:0 0 6px;font-size:16px;font-weight:600}
+.decision p{margin:0;color:var(--muted);font-size:14.5px;max-width:none}
+.decision p+p{margin-top:8px}
+.decision .took{color:var(--ink)}
+
+.limit{background:var(--warn-soft);border:1px solid var(--rule);
+  border-left:3px solid var(--warn);border-radius:5px;padding:16px 18px;margin:0 0 13px}
+.limit h3{margin:0 0 6px;font-size:16px;font-weight:600;color:var(--warn)}
+.limit p{margin:0;font-size:14.5px;max-width:none}
+
+.note{background:var(--note-soft);border:1px solid var(--rule);
+  border-left:3px solid var(--note);border-radius:5px;padding:16px 18px;margin:0 0 22px}
+.note p{margin:0;font-size:14.5px;max-width:none}
+.note p+p{margin-top:8px}
+
+blockquote{font-family:var(--f-ar);direction:rtl;font-size:16px;line-height:2;
+  background:var(--quote);border-radius:5px;padding:15px 17px;margin:14px 0}
+blockquote b{color:var(--accent)}
+
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;margin:0 0 20px}
+.step{background:var(--card);border:1px solid var(--rule);border-radius:5px;
+  padding:11px 14px;flex:1 1 130px;min-width:130px}
+.step em{display:block;font-style:normal;font-size:11px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--faint);margin-bottom:3px}
+.step b{display:block;font-size:14px;font-weight:600;line-height:1.4}
+.step span{display:block;font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.5}
+
+.status{display:inline-block;font-size:11px;letter-spacing:.06em;
+  text-transform:uppercase;font-weight:600;padding:2px 8px;border-radius:3px;
+  white-space:nowrap}
+.status.met{background:var(--accent-soft);color:var(--accent)}
+.status.part{background:var(--note-soft);color:var(--note)}
+.status.no{background:var(--warn-soft);color:var(--warn)}
+
+footer{border-top:1px solid var(--rule);padding-top:20px;color:var(--faint);
+  font-size:13.5px}
+footer p{max-width:66ch}
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Build report</p>
+  <h1>docrouter Build Report</h1>
+  <p class="lede">What was built to route Arabic government correspondence to
+  the right Saudi institution, which tools and models it runs on, why each was
+  chosen over the alternative, and which of the original goals it actually
+  reached.</p>
+</header>
+
+<section>
+  <div class="figures">
+    <div class="fig hero"><b>14</b><span>institutions in the taxonomy</span></div>
+    <div class="fig"><b>5,155</b><span>lines across 22 modules</span></div>
+    <div class="fig"><b>193</b><span>tests, 85.7% coverage</span></div>
+    <div class="fig"><b>17</b><span>commits, CI green</span></div>
+  </div>
+  <p>Everything below is the state of the repository at commit
+  <code>f289c32</code>. The figures were regenerated from a clean run rather
+  than quoted from notes.</p>
+</section>
+
+<section>
+  <h2>1. The brief, and what it ruled out</h2>
+  <p class="sdesc">Four facts about the problem determined most of the
+  engineering. They are worth stating first, because several decisions later
+  in this document look strange without them.</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Constraint</th><th>Consequence for the build</th></tr></thead>
+    <tbody>
+      <tr><td><b>No labeled data exists</b></td><td>Nothing could be trained
+      first. The taxonomy had to become the source of truth, and a corpus had
+      to be authored to test against.</td></tr>
+      <tr><td><b>Input is mixed scanned and digital</b></td><td>Ingestion needed
+      a text-layer test and an OCR fallback, not one or the other.</td></tr>
+      <tr><td><b>Local only — nothing leaves the network</b></td><td>The
+      self-hosted gateway became the default backend and the cloud path became
+      opt-in with a warning.</td></tr>
+      <tr><td><b>This is an assessment</b></td><td>The absence of a gold set is
+      an expected condition, not a failure to hide. The report says so plainly.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>The last one deserves emphasis. Routing labels of the kind this system
+  predicts exist only inside a receiving ministry's own mail room. No public
+  dataset carries them — this was verified directly against the Humans in the
+  Loop Arabic documents dataset (document <em>type</em> classes, explicitly no
+  organizational labels) and Saudi Open Data (statistics, not correspondence).
+  The gap is structural, not an oversight.</p>
+</section>
+
+<section>
+  <h2>2. What the system does, end to end</h2>
+  <p class="sdesc">Six stages. Each is a separate module behind a contract, so
+  any one can be swapped without touching the others.</p>
+
+  <div class="flow">
+    <div class="step"><em>1 · Ingest</em><b>Extract</b><span>PDF text layer, DOCX,
+    TXT — or OCR when the page has no usable Arabic</span></div>
+    <div class="step"><em>2 · Normalize</em><b>Clean</b><span>Two strengths:
+    light for the model, aggressive for the baseline</span></div>
+    <div class="step"><em>3 · Redact</em><b>Mask</b><span>Typed placeholders for
+    IDs, IBANs, phones, tax numbers</span></div>
+    <div class="step"><em>4 · Classify</em><b>Route</b><span>Gateway LLM, Claude,
+    or offline baseline — same interface</span></div>
+    <div class="step"><em>5 · Threshold</em><b>Gate</b><span>Confidence cut that
+    holds uncertain documents back for a human</span></div>
+    <div class="step"><em>6 · Label</em><b>Review</b><span>Two-lane queue feeding
+    corrections back as few-shot examples</span></div>
+  </div>
+
+  <p>Stage 6 closes the loop onto stage 4: a reviewer's <em>correction</em> —
+  not a confirmation — becomes a few-shot example in the next prompt. That is
+  the only mechanism in the system by which it gets better over time.</p>
+
+  <h3>The modules</h3>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Module</th><th class="n">Lines</th><th>Responsibility</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">cli.py</td><td class="n">943</td><td>18 commands across 5 groups; argument handling and orchestration only</td></tr>
+      <tr><td class="mono">mockdata.py</td><td class="n">695</td><td>Template generator, LLM generator, curated corpus loader, OCR-noise injector</td></tr>
+      <tr><td class="mono">ingest.py</td><td class="n">533</td><td>Extractor and OCR registries, text-layer policy, Tesseract discovery</td></tr>
+      <tr><td class="mono">labeling/review.py</td><td class="n">428</td><td>Loopback-only review server with blind serving</td></tr>
+      <tr><td class="mono">threshold.py</td><td class="n">352</td><td>Sweep, calibration, per-class cuts, held-out validation</td></tr>
+      <tr><td class="mono">classify/openai_compat.py</td><td class="n">310</td><td>Gateway backend with three-strategy format negotiation</td></tr>
+      <tr><td class="mono">classify/llm.py</td><td class="n">271</td><td>Anthropic backend, schema-constrained, Batches API</td></tr>
+      <tr><td class="mono">labeling/prioritize.py</td><td class="n">234</td><td>Two-lane active-learning queue</td></tr>
+      <tr><td class="mono">fewshot.py</td><td class="n">202</td><td>Gold labels into a byte-stable cached prompt prefix</td></tr>
+      <tr><td class="mono">privacy.py</td><td class="n">83</td><td>Six redaction rules, typed placeholders</td></tr>
+      <tr><td class="mono">protocols.py</td><td class="n">79</td><td>The contracts everything else is written against</td></tr>
+    </tbody>
+    <caption>Eleven of 22 modules; the remainder are taxonomy loading, models,
+    evaluation, reporting, the baseline, factories and the label store.</caption>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>3. The models</h2>
+  <p class="sdesc">Three, for three different jobs. Only one of them has
+  actually produced the numbers in the evaluation report — that distinction is
+  made explicit below rather than glossed.</p>
+
+  <div class="decision">
+    <h3>gpt-oss on the self-hosted LiteLLM gateway — the intended primary</h3>
+    <p class="took">Reached over an OpenAI-compatible endpoint at
+    <code>COMPANY_API_URL</code>, model <code>COMPANY_LLM_MODEL</code>.</p>
+    <p>This is the default backend precisely because of the local-only policy:
+    the document never leaves the network. The backend negotiates output format
+    across three strategies in order — <code>json_schema</code>,
+    <code>json_object</code>, then a prompt-only fallback — because gateways
+    differ in what they support and the code should not assume. Whatever the
+    strategy, the returned <code>institution_id</code> is validated against the
+    taxonomy, so a hallucinated destination is caught rather than routed.</p>
+    <p><b>Status: never executed.</b> The gateway sits behind Tailscale and the
+    device has not been approved by the tailnet admin. Not one request has
+    reached it.</p>
+  </div>
+
+  <div class="decision">
+    <h3>claude-opus-5 — corpus generation and the cloud classification path</h3>
+    <p class="took">Anthropic Messages API, plus the Batches API for bulk runs
+    and prompt caching for the fixed prefix.</p>
+    <p>Chosen for two things a smaller model does poorly: writing Saudi
+    administrative Arabic that reads like real correspondence rather than
+    translated English, and holding 14 institution definitions plus their
+    disambiguation rules in one prompt. Output is constrained by a JSON schema
+    whose <code>enum</code> is the taxonomy's own ID list, so the model
+    physically cannot invent a destination.</p>
+    <p>The classification path is present, tested and reachable with
+    <code>--backend claude</code>, but it is opt-in and emits a warning first,
+    because using it means the document leaves the network.</p>
+  </div>
+
+  <div class="decision">
+    <h3>TF-IDF + linear SVM — the offline baseline</h3>
+    <p class="took">scikit-learn: character 2–5-grams and word grams unioned,
+    <code>LinearSVC</code> wrapped in <code>CalibratedClassifierCV</code>.</p>
+    <p>Its job is not to win. It exists so every LLM number has something to be
+    measured against, it costs nothing to run, and it is the natural fallback if
+    the deployment ever has to go fully on-premises with no model server at all.
+    Character n-grams carry most of the signal: Arabic is morphologically rich,
+    and 2–5-grams survive the prefixes and clitics that otherwise split one word
+    across a dozen surface forms. The calibration wrapper is what makes it
+    produce probabilities the threshold module can consume.</p>
+  </div>
+
+  <div class="limit">
+    <h3>Every accuracy figure in this project came from the baseline</h3>
+    <p>No LLM has scored this corpus. The gateway is unreachable and there is no
+    Anthropic key configured. So <b>80.2% on the curated corpus and 63.6% on the
+    hard subset are TF-IDF numbers</b> — they are the floor the LLM would have to
+    beat, not a measurement of the system as designed. Reading them as the
+    product's accuracy would overstate what has been demonstrated in one
+    direction and understate the design in the other.</p>
+  </div>
+
+  <p>One model on the gateway is deliberately unused: <code>bge-m3</code>, the
+  embedding model. Retrieval-based few-shot selection would pick better examples
+  per document, but it changes the prompt prefix on every call and destroys the
+  cache. With only 14 classes a fixed, sorted example set captures most of the
+  benefit at a fraction of the cost — so the embedding model stays on the shelf,
+  and the reason is written into <code>fewshot.py</code> rather than left for
+  someone to rediscover.</p>
+</section>
+
+<section>
+  <h2>4. The tool inventory</h2>
+  <p class="sdesc">Every dependency, what it does here, and what it was chosen
+  over.</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Tool</th><th>Role</th><th>Why this one</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">PyMuPDF</td><td>PDF text extraction and page rendering</td><td>Exposes the text layer per page, which is what makes "does this page need OCR?" answerable without guessing</td></tr>
+      <tr><td class="mono">Tesseract<br>+ pytesseract</td><td>Local OCR, <code>ara</code> traineddata</td><td>The only credible OCR that runs entirely offline. Located without PATH via a candidate list plus <code>TESSERACT_CMD</code>, because the Windows installer does not add itself</td></tr>
+      <tr><td class="mono">Pydantic</td><td>Domain models and schema validation</td><td>The same model definitions generate the JSON schema sent to the LLM and validate what comes back</td></tr>
+      <tr><td class="mono">PyYAML</td><td>Taxonomy and corpus storage</td><td>The taxonomy is edited by domain reviewers, not programmers. YAML with Arabic keys survives that; JSON does not invite it</td></tr>
+      <tr><td class="mono">Typer + Rich</td><td>CLI and terminal output</td><td>Typer derives the interface from type hints; Rich renders RTL Arabic tables legibly in a terminal</td></tr>
+      <tr><td class="mono">scikit-learn<br>+ joblib</td><td>Baseline model and persistence</td><td>Standard, offline, and <code>CalibratedClassifierCV</code> gives the probabilities the threshold work needs</td></tr>
+      <tr><td class="mono">python-docx</td><td>DOCX extraction</td><td>Government correspondence arrives as Word documents at least as often as PDF</td></tr>
+      <tr><td class="mono">python-dotenv</td><td>Loading <code>.env</code></td><td>Added after a defect: the error message told users to create a <code>.env</code> that the code never read</td></tr>
+      <tr><td class="mono">pytest<br>+ pytest-cov</td><td>193 tests, 85% gate</td><td>The coverage gate is enforced in CI, not aspirational</td></tr>
+      <tr><td class="mono">ruff</td><td>Lint and format</td><td>Caught a real <code>NameError</code> in a code path no test covered</td></tr>
+      <tr><td class="mono">mypy</td><td>Type checking</td><td>Not strict mode — the contracts in <code>protocols.py</code> are checked; chasing annotations through untyped sklearn buys noise</td></tr>
+      <tr><td class="mono">GitHub Actions</td><td>CI: 4 jobs</td><td>lint · test (3.11/3.12/3.13 × Ubuntu/Windows) · offline smoke · credential and real-document scan</td></tr>
+      <tr><td class="mono">arabic-reshaper<br>+ python-bidi</td><td>Test fixtures only</td><td>Needed to render <em>correctly shaped</em> Arabic into test images. Without them the OCR test measures nonsense — see §6</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>5. Decisions that shaped the code</h2>
+  <p class="sdesc">The brief asked for SOLID applied properly rather than
+  named. These are the places it changed the design.</p>
+
+  <div class="decision">
+    <h3>Protocols, not abstract base classes</h3>
+    <p><code>typing.Protocol</code> means an implementation does not import or
+    inherit from anything in this package. Someone can drop in their own OCR
+    backend or classifier without taking a dependency on our class hierarchy —
+    dependency inversion without the inheritance tax.</p>
+  </div>
+
+  <div class="decision">
+    <h3>The classifier interface is split in two</h3>
+    <p><code>Classifier</code> is the narrow contract every backend satisfies.
+    <code>BatchClassifier</code> adds the Batches API surface. The offline
+    baseline has no notion of an asynchronous batch, and making it grow stub
+    methods to satisfy one fat interface is exactly the interface-segregation
+    problem — so it simply does not implement the second protocol, and callers
+    that need batching ask for that type. This is not decoration: it is what
+    surfaced the <code>NameError</code> ruff caught.</p>
+  </div>
+
+  <div class="decision">
+    <h3>Registries for extractors and OCR backends</h3>
+    <p><code>ExtractorRegistry</code> maps suffix to extractor;
+    <code>OcrRegistry</code> maps name to backend. Adding <code>.rtf</code>
+    support means registering an extractor, not editing a dispatch chain —
+    open for extension, closed for modification, in the one place in this
+    codebase where new cases genuinely keep arriving.</p>
+  </div>
+
+  <div class="decision">
+    <h3>The usability policy is injected, not hard-coded</h3>
+    <p><code>PdfExtractor</code> takes an <code>is_usable</code> callable that
+    decides whether a page's text layer is good enough to skip OCR. This began
+    as a workaround — PyMuPDF ships no Arabic base-14 font, so tests could not
+    render real Arabic PDFs — and turned into the better design: the policy is
+    unit-tested directly, and integration tests inject a stub.</p>
+  </div>
+
+  <div class="decision">
+    <h3>Blind serving in the review queue</h3>
+    <p>The labeling queue has two lanes: a priority lane (uncertainty, margin,
+    disagreement, confusion pairs, novelty, with a redundancy penalty) and a
+    random lane. For random-lane items the session <b>strips</b> the model's
+    prediction rather than hiding it in the response, so a reviewer cannot be
+    anchored by it and the random lane stays an unbiased estimate of true
+    accuracy.</p>
+  </div>
+
+  <div class="decision">
+    <h3>Redaction with typed placeholders, not deletion</h3>
+    <p>National IDs become <span class="ar">[رقم هوية]</span>, IBANs become
+    <span class="ar">[آيبان]</span>, tax numbers <span class="ar">[رقم ضريبي]</span>.
+    The <em>type</em> survives because it is routing signal — a tax number
+    points at ZATCA. Dates and amounts are left intact for the same reason.
+    Measured cost: <b>37 identifiers masked, accuracy 80.2% → 80.2%.</b></p>
+  </div>
+
+  <h3>The taxonomy is the design</h3>
+  <p>Fourteen institutions, each with an Arabic name, description, keywords,
+  typical document types, and an explicit disambiguation rule — plus eight
+  named confusion pairs. Prompts, the schema <code>enum</code>, the baseline's
+  label set, the queue's confusion-pair scoring and the evaluation's confusion
+  matrix all derive from this one file. Changing a boundary is a YAML edit, not
+  a code change.</p>
+
+  <p>The hardest boundaries are the ones a keyword search cannot resolve. A
+  workplace-injury letter mentioning both an employer's obligations and an
+  insurance claim is genuinely ambiguous between HRSD and GOSI:</p>
+
+  <blockquote>يفيد بأن المصاب يعمل لدى المنشأة منذ ثلاث سنوات، وقد وقعت الإصابة
+  أثناء أداء العمل، ويطلب صرف <b>التعويض المستحق</b> وفق نظام
+  <b>التأمينات الاجتماعية</b>، مع إلزام <b>صاحب العمل</b> بتسوية الأجور
+  المتأخرة.</blockquote>
+
+  <p>Compensation under the social-insurance system points at GOSI; obliging
+  the employer to settle back wages points at HRSD. Sixteen of the 86 curated
+  documents are tagged as boundary cases like this one, and they are why the
+  hard subset scores 63.6% rather than something comfortable.</p>
+</section>
+
+<section>
+  <h2>6. What went wrong, and what it changed</h2>
+  <p class="sdesc">Four failures worth recording, because each one changed the
+  code or the conclusions rather than just costing time.</p>
+
+  <div class="limit">
+    <h3>A test that passed while the bug remained</h3>
+    <p>The first fix for missing Anthropic credentials wrapped the
+    <code>Anthropic()</code> constructor in try/except, and the test mocked that
+    constructor. Both were green. But the SDK constructs fine without a key and
+    only fails at request time inside header validation — so the real path still
+    raised a raw traceback. Fixed by wrapping the <code>messages.create</code>
+    call and mocking <em>that</em> seam, then verified by reverting the fix and
+    confirming the test goes red. A test that cannot fail is not evidence.</p>
+  </div>
+
+  <div class="limit">
+    <h3>The first Arabic OCR measurement was invalid</h3>
+    <p>It reported 94% character overlap. But Pillow was built without raqm, so
+    the test image contained <b>unshaped, visually reversed</b> Arabic — the
+    measurement was of a string no OCR engine should ever read correctly. Redone
+    with <code>arabic-reshaper</code> and <code>python-bidi</code> producing
+    properly shaped RTL text: <b>29 of 29 words exact</b>. The lesson is that
+    Arabic-specific rendering is a correctness concern in the <em>test harness</em>,
+    not only in the product.</p>
+  </div>
+
+  <div class="limit">
+    <h3>Six defects escaped as raw tracebacks</h3>
+    <p>An end-to-end sweep found them: <code>label prelabel</code> had no
+    <code>--model-path</code>; Claude OCR without credentials raised a bare
+    <code>TypeError</code>; a missing Tesseract, an unsupported file type and a
+    missing PDF all crashed instead of explaining; and <code>evaluate</code>
+    silently scored only the overlap between predictions and gold rather than
+    reporting the mismatch. The last one is the dangerous one — it would have
+    quietly inflated every score.</p>
+  </div>
+
+  <div class="limit">
+    <h3>CI failed on Ubuntu only</h3>
+    <p><code>uv pip install --system</code> hits PEP 668's externally-managed
+    environment on Ubuntu runners; Windows was unaffected, which is why it was
+    not caught locally. Switched to <code>actions/setup-python</code> with plain
+    <code>pip</code>. The matrix earned its cost on the first run.</p>
+  </div>
+
+  <p>One more, less dramatic: the local-only policy turned an existing default
+  into a bug. <code>--ocr claude</code> was the default, which would have
+  silently uploaded page images of scanned government documents. Defaults were
+  flipped to local, and <code>_warn_if_leaving_network</code> now fires before
+  any request that would leave the network.</p>
+</section>
+
+<section>
+  <h2>7. Goals versus delivery</h2>
+  <p class="sdesc">Against the brief as originally stated.</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Goal</th><th>Status</th><th>Evidence</th></tr></thead>
+    <tbody>
+      <tr><td>Route Arabic documents to the right institution</td>
+        <td><span class="status part">Demonstrated</span></td>
+        <td>End-to-end pipeline runs; baseline scores 80.2% curated, 63.6% hard. No LLM has run.</td></tr>
+      <tr><td>Work without labeled training data</td>
+        <td><span class="status met">Met</span></td>
+        <td>Taxonomy-driven zero-shot design; 86-document authored corpus; 322 generated templates</td></tr>
+      <tr><td>Handle scanned and digital input</td>
+        <td><span class="status met">Met</span></td>
+        <td>Text-layer detection with OCR fallback; proven on image-only PDFs with <code>--backend none --ocr tesseract</code></td></tr>
+      <tr><td>Keep everything on the network</td>
+        <td><span class="status met">Met</span></td>
+        <td>Gateway backend is the default; cloud paths warn; redaction runs before any request</td></tr>
+      <tr><td>SOLID architecture</td>
+        <td><span class="status met">Met</span></td>
+        <td>Protocol contracts, split classifier interfaces, two registries, injected policies</td></tr>
+      <tr><td>Professional tests and CI</td>
+        <td><span class="status met">Met</span></td>
+        <td>193 tests, 85.7% coverage against an 85% gate, 4 CI jobs across 6 platform combinations, all green</td></tr>
+      <tr><td>Human-in-the-loop labeling</td>
+        <td><span class="status met">Met</span></td>
+        <td>Two-lane queue, loopback-only review server, blind serving, corrections feeding few-shot</td></tr>
+      <tr><td>A confidence threshold that is trustworthy</td>
+        <td><span class="status part">Measured, and found optimistic</span></td>
+        <td>Held-out validation showed +11.5% optimism; ECE 0.337. Both reported rather than buried.</td></tr>
+      <tr><td>Validated against real documents</td>
+        <td><span class="status no">Not met</span></td>
+        <td>Zero real documents. No public dataset carries routing labels; none were obtainable.</td></tr>
+      <tr><td>Taxonomy reviewed by a domain expert</td>
+        <td><span class="status no">Not met</span></td>
+        <td>Review sheet built and ready; no reviewer has signed off on the 14 boundaries</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note">
+    <p><b>The two unmet goals are the same goal twice.</b> Both need something
+    only the receiving institution can supply: real correspondence, and someone
+    who routes it for a living. Everything that could be built without them was
+    built; everything that depends on them is honestly marked open.</p>
+    <p>The threshold result is the most useful thing here, and it is a negative
+    one. Choosing a cut on the same data you evaluate on inflates it by 11.5
+    percentage points — the sweep picked 0.35 and the held-out split delivered
+    88.5%, not the promised figure. Any deployment that skipped that check would
+    have shipped a confidence gate it could not trust.</p>
+  </div>
+</section>
+
+<section>
+  <h2>8. Open items</h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Item</th><th>Blocked on</th><th>Effect once cleared</th></tr></thead>
+    <tbody>
+      <tr><td>Rotate the exposed gateway API key</td><td>Nobody — do this now</td><td>The key was pasted into a chat transcript. It was never written to a file, but it must be considered compromised.</td></tr>
+      <tr><td>Tailnet device approval</td><td>The tailnet admin</td><td>Unblocks the gateway and produces the first real model score</td></tr>
+      <tr><td>Domain review of the taxonomy</td><td>A reviewer</td><td>Turns 14 assumed boundaries into agreed ones</td></tr>
+      <tr><td>Real documents, even 50</td><td>The institution</td><td>Replaces every synthetic figure in this report with a measured one</td></tr>
+      <tr><td>Set the GitHub repository description</td><td>Manual step in the web UI</td><td>Cosmetic; text is drafted</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<footer>
+  <p>Companion documents: the evaluation report covers results and calibration;
+  the taxonomy review sheet is the Arabic RTL instrument for the domain review;
+  the corpus viewer browses all 86 curated documents. This report covers
+  construction and rationale.</p>
+</footer>
+
+</div>
