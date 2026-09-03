@@ -18,6 +18,7 @@ from docrouter.classify.openai_compat import (
     GatewayError,
     GatewayUnavailable,
     OpenAICompatClassifier,
+    OpenAICompatClient,
     _extract_json,
 )
 from docrouter.models import Document
@@ -265,3 +266,22 @@ def test_preflight_reports_an_unreachable_gateway():
     report = _clf(Down()).preflight()
     assert report["reachable"] is False
     assert "no route" in report["error"]
+
+
+def test_reasoning_effort_is_omitted_unless_asked_for():
+    """A gateway that does not know the parameter may reject it, not ignore it."""
+    sent = {}
+
+    class Recorder(OpenAICompatClient):
+        def __init__(self):
+            pass
+
+        def _request(self, path, payload=None):
+            sent.update(payload or {})
+            return {"choices": [{"message": {"content": "{}"}}]}
+
+    Recorder().chat(model="m", messages=[])
+    assert "reasoning_effort" not in sent
+
+    Recorder().chat(model="m", messages=[], reasoning_effort="low")
+    assert sent["reasoning_effort"] == "low"

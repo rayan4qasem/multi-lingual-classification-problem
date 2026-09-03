@@ -56,12 +56,26 @@ class Taxonomy(BaseModel):
             if unknown:
                 raise ValueError(f"confusion_pairs references unknown ids: {unknown}")
 
-    def render_for_prompt(self) -> str:
+    def render_for_prompt(self, detail: str = "full") -> str:
         """The institution catalogue as it appears in the system prompt.
 
         Deterministic ordering and no timestamps — this block is the cached
         prefix of every classification request, so it must be byte-stable.
+
+        `detail="compact"` drops the keyword and document-type lists, which
+        are 29% of the catalogue. That is a cost argument and an accuracy
+        argument at once: the rule at the top of the prompt tells the model to
+        judge by the requested action rather than by scattered vocabulary, and
+        then a list headed «ألفاظ دالة» hands it exactly that vocabulary. The
+        boundary cases are authored to carry the wrong institution's words, so
+        the keyword list is actively misleading on the documents that are
+        hardest. Descriptions and disambiguation rules are always kept: they
+        are what a two-way decision actually turns on.
         """
+        if detail not in ("full", "compact"):
+            raise ValueError(f"unknown detail {detail!r}; expected 'full' or 'compact'")
+        verbose = detail == "full"
+
         blocks: list[str] = []
         for inst in self.institutions:
             lines = [
@@ -69,9 +83,9 @@ class Taxonomy(BaseModel):
                 f"الاسم: {inst.name_ar}",
                 f"الاختصاص: {inst.description_ar.strip()}",
             ]
-            if inst.document_types_ar:
+            if verbose and inst.document_types_ar:
                 lines.append("أمثلة على الوثائق: " + "، ".join(inst.document_types_ar))
-            if inst.keywords_ar:
+            if verbose and inst.keywords_ar:
                 lines.append("ألفاظ دالة: " + "، ".join(inst.keywords_ar))
             if inst.disambiguation_ar:
                 lines.append(f"تمييز: {inst.disambiguation_ar.strip()}")

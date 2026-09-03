@@ -217,3 +217,43 @@ def test_resolver_clamps_an_out_of_range_confidence(tax):
     client = StubClient('{"institution_id": "gosi", "confidence": 4.2}')
     _, confidence, _ = LLMPairResolver(client, "m", tax).resolve(doc(), PAIR_A, PAIR_B)
     assert confidence == 1.0
+
+
+# --- prompt size: the compact catalogue -----------------------------------
+
+
+def test_compact_drops_keywords_and_document_types(tax):
+    """Keywords are the thing the boundary cases are designed to exploit."""
+    full = tax.render_for_prompt("full")
+    compact = tax.render_for_prompt("compact")
+
+    assert "ألفاظ دالة" in full
+    assert "ألفاظ دالة" not in compact
+    assert "أمثلة على الوثائق" not in compact
+
+
+def test_compact_keeps_what_a_two_way_decision_turns_on(tax):
+    compact = tax.render_for_prompt("compact")
+    for inst in tax.institutions:
+        assert inst.id in compact
+        assert inst.name_ar in compact
+        assert inst.description_ar.strip() in compact
+        if inst.disambiguation_ar:
+            assert inst.disambiguation_ar.strip() in compact
+
+
+def test_compact_is_materially_smaller(tax):
+    full = tax.render_for_prompt("full")
+    compact = tax.render_for_prompt("compact")
+    assert len(compact) < len(full) * 0.80
+
+
+def test_both_renderings_are_byte_stable(tax):
+    """The catalogue is a cached prompt prefix; it must not vary per call."""
+    for detail in ("full", "compact"):
+        assert tax.render_for_prompt(detail) == tax.render_for_prompt(detail)
+
+
+def test_unknown_detail_is_rejected(tax):
+    with pytest.raises(ValueError, match="unknown detail"):
+        tax.render_for_prompt("terse")

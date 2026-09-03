@@ -129,6 +129,7 @@ class LLMClassifier:
         client: anthropic.Anthropic | None = None,
         examples: ExampleSet | None = None,
         redact_pii: bool = True,
+        detail: str = "full",
     ):
         self.taxonomy = taxonomy or load_taxonomy()
         self.model = model or os.environ.get("DOCROUTER_MODEL", DEFAULT_MODEL)
@@ -147,8 +148,9 @@ class LLMClassifier:
         # Examples join the cached prefix rather than the per-document turn.
         # They are rendered in sorted order and carry no timestamps, so the
         # prefix stays byte-stable and keeps hitting the cache.
+        self.detail = detail
         block = render_examples(examples, self.taxonomy) if examples else ""
-        self._system = SYSTEM_PREAMBLE + self.taxonomy.render_for_prompt() + block
+        self._system = SYSTEM_PREAMBLE + self.taxonomy.render_for_prompt(detail) + block
 
     @property
     def name(self) -> str:

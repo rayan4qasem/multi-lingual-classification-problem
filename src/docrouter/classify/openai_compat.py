@@ -119,6 +119,7 @@ class OpenAICompatClient:
         response_format: dict | None = None,
         temperature: float = 0.0,
         max_tokens: int = 1200,
+        reasoning_effort: str | None = None,
     ) -> str:
         payload: dict = {
             "model": model,
@@ -129,6 +130,13 @@ class OpenAICompatClient:
         }
         if response_format is not None:
             payload["response_format"] = response_format
+        # Only sent when asked for. Reasoning models bill their thinking, and
+        # on a fourteen-way lookup with the rules already in the prompt, low
+        # effort answers as well as high — measured at 187 reasoning tokens
+        # down to 40. Omitted by default because a gateway that does not know
+        # the parameter may reject the request rather than ignore it.
+        if reasoning_effort is not None:
+            payload["reasoning_effort"] = reasoning_effort
         body = self._request("/chat/completions", payload)
         choices = body.get("choices") or []
         if not choices:
@@ -166,7 +174,10 @@ class OpenAICompatClassifier:
         base_url: str | None = None,
         api_key: str | None = None,
         strategy: str | None = None,
+        detail: str = "full",
+        reasoning_effort: str | None = None,
     ):
+        self.reasoning_effort = reasoning_effort
         self.taxonomy = taxonomy or load_taxonomy()
         self.model = model or _env("DOCROUTER_LOCAL_MODEL", "COMPANY_LLM_MODEL") or "gpt-oss"
         self.review_threshold = review_threshold
@@ -181,8 +192,9 @@ class OpenAICompatClassifier:
         self.strategy: str | None = strategy
         self._valid_ids = set(self.taxonomy.ids)
 
+        self.detail = detail
         block = render_examples(examples, self.taxonomy) if examples else ""
-        self._system = SYSTEM_PREAMBLE + self.taxonomy.render_for_prompt() + block
+        self._system = SYSTEM_PREAMBLE + self.taxonomy.render_for_prompt(detail) + block
 
     @property
     def name(self) -> str:
@@ -261,6 +273,7 @@ class OpenAICompatClassifier:
             model=self.model,
             messages=self._messages(doc, strategy),
             response_format=self._response_format(strategy),
+            reasoning_effort=self.reasoning_effort,
         )
         raw = _extract_json(content)
         if raw.get("institution_id") not in self._valid_ids:
