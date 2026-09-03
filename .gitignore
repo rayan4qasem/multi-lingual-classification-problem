@@ -26,3 +26,4 @@ data/prompt/
 .coverage
 coverage.xml
 htmlcov/
+runs/

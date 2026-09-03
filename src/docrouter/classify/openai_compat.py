@@ -28,6 +28,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Sequence
 
+from .. import __version__
 from ..fewshot import ExampleSet
 from ..fewshot import render as render_examples
 from ..models import Alternative, Document, LLMClassification, Prediction
@@ -37,6 +38,8 @@ from ..taxonomy import load as load_taxonomy
 from .llm import SYSTEM_PREAMBLE, _user_content, build_schema
 
 STRATEGIES = ("json_schema", "json_object", "prompt")
+
+USER_AGENT = f"docrouter/{__version__}"
 
 
 class GatewayError(RuntimeError):
@@ -84,7 +87,11 @@ class OpenAICompatClient:
     def _request(self, path: str, payload: dict | None = None) -> dict:
         url = f"{self.base_url}{path}"
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
-        headers = {"Content-Type": "application/json"}
+        # urllib's default User-Agent is "Python-urllib/3.x", which WAFs in
+        # front of hosted gateways reject outright — Cloudflare answers it with
+        # a 403 and error code 1010 before the request ever reaches the API.
+        # A self-hosted gateway does not care; a proxied one does.
+        headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         request = urllib.request.Request(

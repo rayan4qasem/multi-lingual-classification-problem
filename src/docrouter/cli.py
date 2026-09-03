@@ -28,6 +28,7 @@ from .classify import (
     available_backends,
     create_classifier,
 )
+from .classify.tiebreak import TiebreakClassifier
 from .evaluate import evaluate as run_evaluate
 from .models import Document
 from .protocols import BatchClassifier, Classifier
@@ -82,6 +83,26 @@ def _require_key() -> None:
             "and put the key there — it is loaded automatically."
         )
         raise typer.Exit(1)
+
+
+def _wrap_with_tiebreak(clf: Classifier, tax) -> TiebreakClassifier | None:
+    """Add confusion-pair adjudication, if the backend can be asked twice.
+
+    The resolver needs a chat endpoint, which the offline baseline does not
+    have. Rather than fail, this says so and returns None — the run still
+    produces predictions, just without a second pass.
+    """
+    from .classify.tiebreak import LLMPairResolver, TiebreakClassifier
+
+    client = getattr(clf, "client", None)
+    model = getattr(clf, "model", None)
+    if client is None or model is None:
+        console.print(
+            f"[yellow]--tiebreak needs a gateway backend; {clf.name} cannot be "
+            "asked a second question. Continuing without it.[/yellow]"
+        )
+        return None
+    return TiebreakClassifier(clf, LLMPairResolver(client, model, tax), tax)
 
 
 def _make_classifier(backend: str, **kwargs) -> Classifier:
@@ -213,6 +234,13 @@ def classify(
     redact: bool = typer.Option(
         True, help="mask IDs, phones, IBANs, tax numbers and emails before sending"
     ),
+    tiebreak: bool = typer.Option(
+        False,
+        "--tiebreak",
+        help="Re-ask as a two-way question when the top two institutions form a "
+        "declared confusion pair. Needs a gateway backend; costs one extra "
+        "request per contested document.",
+    ),
     limit: int = typer.Option(0, help="stop after N documents (0 = all)"),
     out: Path = typer.Option(RUNS / "predictions.jsonl"),
 ) -> None:
@@ -267,8 +295,17 @@ def classify(
             "IDs and phone numbers, will be sent to the API.[/yellow]"
         )
 
-    with console.status(f"Classifying {len(docs)} document(s) via {clf.name}..."):
-        predictions = clf.classify_many(docs)
+    # Held as its own name rather than reassigned onto `clf`: the wrapper may
+    # decline to wrap (offline backends cannot be asked twice), and the run
+    # counters below exist only when it did.
+    wrapped = _wrap_with_tiebreak(clf, tax) if tiebreak else None
+    active: Classifier = wrapped or clf
+
+    with console.status(f"Classifying {len(docs)} document(s) via {active.name}..."):
+        predictions = active.classify_many(docs)
+
+    if wrapped is not None:
+        console.print(f"tiebreak: adjudicated {wrapped.adjudicated}, overturned {wrapped.changed}")
 
     console.print(reporting.routing_table(predictions, tax))
     if len(predictions) > 40:
@@ -292,9 +329,26 @@ def train_baseline(
     test_ratio: float = typer.Option(0.25),
     seed: int = typer.Option(7),
     out: Path = typer.Option(MODELS / "baseline.joblib"),
+    include_curated: bool = typer.Option(
+        False,
+        "--include-curated",
+        help="Also train on the hand-authored corpus. Worth +4.6 points on the "
+        "adversarial subset, because templates are drawn from phrase pools and "
+        "real correspondence is not. Do this for a model you intend to use, and "
+        "score it with `--test-ratio` or cross-validation rather than against "
+        "the curated set it has now seen.",
+    ),
 ) -> None:
     """Fit the offline TF-IDF + SVM baseline and report held-out accuracy."""
     docs = mockdata.load_jsonl(dataset)
+    if include_curated:
+        curated = mockdata.generate_curated()
+        console.print(
+            f"Adding {len(curated)} curated documents to training. "
+            "[yellow]The curated set is no longer a clean benchmark for this "
+            "model.[/yellow]"
+        )
+        docs = docs + curated
     rng = random.Random(seed)
     rng.shuffle(docs)
     split = int(len(docs) * (1 - test_ratio))
