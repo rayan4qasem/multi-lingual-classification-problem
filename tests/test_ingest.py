@@ -451,6 +451,10 @@ def test_an_explicit_override_wins(monkeypatch, tmp_path):
 
 
 def test_missing_binary_is_a_typed_error(monkeypatch):
+    # Without the wrapper installed, transcribe() fails at the import before
+    # it ever looks for the binary, and raises a different OCRUnavailable.
+    # This test is about the binary, so it needs the library present.
+    pytest.importorskip("pytesseract")
     monkeypatch.delenv("TESSERACT_CMD", raising=False)
     monkeypatch.setattr(ingest, "TESSERACT_CANDIDATES", ())
     monkeypatch.setattr("shutil.which", lambda _n: None)

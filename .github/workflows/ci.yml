@@ -61,7 +61,12 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - name: Install
-        run: pip install -e ".[dev]"
+        # The tesseract extra is the Python wrapper only; the runners have no
+        # tesseract binary. That is deliberately the interesting case — a
+        # machine with the library and without the executable is what a user
+        # who forgot the installer has, and it is the path the discovery
+        # tests assert on.
+        run: pip install -e ".[dev,tesseract]"
       - name: Tests
         run: pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under=85
       - name: Upload coverage
