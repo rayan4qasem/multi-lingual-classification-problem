@@ -132,12 +132,12 @@ footer p{max-width:66ch}
 <section>
   <div class="figures">
     <div class="fig hero"><b>14</b><span>institutions in the taxonomy</span></div>
-    <div class="fig"><b>5,155</b><span>lines across 22 modules</span></div>
-    <div class="fig"><b>193</b><span>tests, 85.7% coverage</span></div>
-    <div class="fig"><b>17</b><span>commits, CI green</span></div>
+    <div class="fig"><b>5,451</b><span>lines across 23 modules</span></div>
+    <div class="fig"><b>214</b><span>tests, 87% coverage</span></div>
+    <div class="fig"><b>21</b><span>commits</span></div>
   </div>
   <p>Everything below is the state of the repository at commit
-  <code>f289c32</code>. The figures were regenerated from a clean run rather
+  <code>5deb3be</code>. The figures were regenerated from a clean run rather
   than quoted from notes.</p>
 </section>
 
@@ -237,9 +237,12 @@ footer p{max-width:66ch}
     differ in what they support and the code should not assume. Whatever the
     strategy, the returned <code>institution_id</code> is validated against the
     taxonomy, so a hallucinated destination is caught rather than routed.</p>
-    <p><b>Status: never executed.</b> The gateway sits behind Tailscale and the
-    device has not been approved by the tailnet admin. Not one request has
-    reached it.</p>
+    <p><b>Status: proven, but not against your gateway.</b> The company gateway
+    still sits behind an unapproved Tailscale device. The same backend was
+    pointed at a public OpenAI-compatible endpoint serving the same gpt-oss
+    family and scored the corpus — negotiating <code>json_schema</code>, the
+    strongest of the three. So the code path is exercised end to end; the
+    machine that will serve production is not.</p>
   </div>
 
   <div class="decision">
@@ -270,14 +273,30 @@ footer p{max-width:66ch}
     produce probabilities the threshold module can consume.</p>
   </div>
 
+  <div class="decision">
+    <h3>The baseline was the floor, and the model cleared it</h3>
+    <p class="took">Curated 80.2% → 91.5%. Hard subset 63.6% → 83.9%.</p>
+    <p>gpt-oss-20b beat the TF-IDF baseline on both, and beat it by nearly
+    twice as much on the adversarial subset as on ordinary documents. That
+    asymmetry is the point: the boundary cases turn on negated clauses that a
+    bag of character n-grams cannot represent at all, and a transformer can.
+    It is the measured argument for fine-tuning an Arabic encoder rather than
+    an assumed one.</p>
+    <p>Both numbers carry a caveat stated in full in the evaluation report: the
+    model run covers 59 of 86 documents, stopped by a free-tier daily token
+    cap, and the missing 21 are the tail of the corpus rather than a random
+    sample.</p>
+  </div>
+
   <div class="limit">
-    <h3>Every accuracy figure in this project came from the baseline</h3>
-    <p>No LLM has scored this corpus. The gateway is unreachable and there is no
-    Anthropic key configured. So <b>80.2% on the curated corpus and 63.6% on the
-    hard subset are TF-IDF numbers</b> — they are the floor the LLM would have to
-    beat, not a measurement of the system as designed. Reading them as the
-    product's accuracy would overstate what has been demonstrated in one
-    direction and understate the design in the other.</p>
+    <h3>Two built improvements have never met a live model</h3>
+    <p>A confusion-pair tiebreak — a focused two-way second pass, asked in
+    Arabic with both institutions' disambiguation rules, triggered only when
+    the top two form a declared pair — is implemented and covered by 16 tests.
+    A compact catalogue plus low reasoning effort cuts the token cost of each
+    classification by 27%, measured. Neither has been scored. They are
+    plausible improvements with no evidence behind them, and this report does
+    not count them as results.</p>
   </div>
 
   <p>One model on the gateway is deliberately unused: <code>bge-m3</code>, the
@@ -306,7 +325,7 @@ footer p{max-width:66ch}
       <tr><td class="mono">scikit-learn<br>+ joblib</td><td>Baseline model and persistence</td><td>Standard, offline, and <code>CalibratedClassifierCV</code> gives the probabilities the threshold work needs</td></tr>
       <tr><td class="mono">python-docx</td><td>DOCX extraction</td><td>Government correspondence arrives as Word documents at least as often as PDF</td></tr>
       <tr><td class="mono">python-dotenv</td><td>Loading <code>.env</code></td><td>Added after a defect: the error message told users to create a <code>.env</code> that the code never read</td></tr>
-      <tr><td class="mono">pytest<br>+ pytest-cov</td><td>193 tests, 85% gate</td><td>The coverage gate is enforced in CI, not aspirational</td></tr>
+      <tr><td class="mono">pytest<br>+ pytest-cov</td><td>214 tests, 85% gate</td><td>The coverage gate is enforced in CI, not aspirational</td></tr>
       <tr><td class="mono">ruff</td><td>Lint and format</td><td>Caught a real <code>NameError</code> in a code path no test covered</td></tr>
       <tr><td class="mono">mypy</td><td>Type checking</td><td>Not strict mode — the contracts in <code>protocols.py</code> are checked; chasing annotations through untyped sklearn buys noise</td></tr>
       <tr><td class="mono">GitHub Actions</td><td>CI: 4 jobs</td><td>lint · test (3.11/3.12/3.13 × Ubuntu/Windows) · offline smoke · credential and real-document scan</td></tr>
@@ -463,7 +482,7 @@ footer p{max-width:66ch}
     <tbody>
       <tr><td>Route Arabic documents to the right institution</td>
         <td><span class="status part">Demonstrated</span></td>
-        <td>End-to-end pipeline runs; baseline scores 80.2% curated, 63.6% hard. No LLM has run.</td></tr>
+        <td>gpt-oss-20b scores 91.5% curated and 83.9% hard, against a baseline of 80.2% / 63.6%. Measured on 59 of 86 documents and on synthetic text.</td></tr>
       <tr><td>Work without labeled training data</td>
         <td><span class="status met">Met</span></td>
         <td>Taxonomy-driven zero-shot design; 86-document authored corpus; 322 generated templates</td></tr>
@@ -471,14 +490,14 @@ footer p{max-width:66ch}
         <td><span class="status met">Met</span></td>
         <td>Text-layer detection with OCR fallback; proven on image-only PDFs with <code>--backend none --ocr tesseract</code></td></tr>
       <tr><td>Keep everything on the network</td>
-        <td><span class="status met">Met</span></td>
-        <td>Gateway backend is the default; cloud paths warn; redaction runs before any request</td></tr>
+        <td><span class="status part">Held, with one deliberate exception</span></td>
+        <td>Gateway backend is the default; cloud paths warn; redaction runs before any request. The scoring run above used a public endpoint — defensible only because the corpus is synthetic, and stated rather than quietly done.</td></tr>
       <tr><td>SOLID architecture</td>
         <td><span class="status met">Met</span></td>
         <td>Protocol contracts, split classifier interfaces, two registries, injected policies</td></tr>
       <tr><td>Professional tests and CI</td>
         <td><span class="status met">Met</span></td>
-        <td>193 tests, 85.7% coverage against an 85% gate, 4 CI jobs across 6 platform combinations, all green</td></tr>
+        <td>214 tests, 87% coverage against an 85% gate, 4 CI jobs across 6 platform combinations</td></tr>
       <tr><td>Human-in-the-loop labeling</td>
         <td><span class="status met">Met</span></td>
         <td>Two-lane queue, loopback-only review server, blind serving, corrections feeding few-shot</td></tr>
@@ -514,8 +533,9 @@ footer p{max-width:66ch}
   <table>
     <thead><tr><th>Item</th><th>Blocked on</th><th>Effect once cleared</th></tr></thead>
     <tbody>
-      <tr><td>Rotate the exposed gateway API key</td><td>Nobody — do this now</td><td>The key was pasted into a chat transcript. It was never written to a file, but it must be considered compromised.</td></tr>
-      <tr><td>Tailnet device approval</td><td>The tailnet admin</td><td>Unblocks the gateway and produces the first real model score</td></tr>
+      <tr><td>Rotate two exposed API keys</td><td>Nobody — do this now</td><td>Both the gateway key and the key used for the scoring run were pasted into a chat transcript. Neither is committed, but both must be treated as compromised.</td></tr>
+      <tr><td>Tailnet device approval</td><td>The tailnet admin</td><td>Moves the measurement onto the model that will actually serve production, and back inside the network policy</td></tr>
+      <tr><td>Finish the corpus, and score the two unproven changes</td><td>One day of quota</td><td>Completes the missing 21 documents and settles whether the tiebreak and the compact prompt earn their place</td></tr>
       <tr><td>Domain review of the taxonomy</td><td>A reviewer</td><td>Turns 14 assumed boundaries into agreed ones</td></tr>
       <tr><td>Real documents, even 50</td><td>The institution</td><td>Replaces every synthetic figure in this report with a measured one</td></tr>
       <tr><td>Set the GitHub repository description</td><td>Manual step in the web UI</td><td>Cosmetic; text is drafted</td></tr>
