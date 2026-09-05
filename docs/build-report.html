@@ -134,10 +134,10 @@ footer p{max-width:66ch}
     <div class="fig hero"><b>14</b><span>institutions in the taxonomy</span></div>
     <div class="fig"><b>5,451</b><span>lines across 23 modules</span></div>
     <div class="fig"><b>214</b><span>tests, 87% coverage</span></div>
-    <div class="fig"><b>21</b><span>commits</span></div>
+    <div class="fig"><b>22</b><span>commits</span></div>
   </div>
   <p>Everything below is the state of the repository at commit
-  <code>5deb3be</code>. The figures were regenerated from a clean run rather
+  <code>2152a9e</code>. The figures were regenerated from a clean run rather
   than quoted from notes.</p>
 </section>
 
@@ -274,18 +274,29 @@ footer p{max-width:66ch}
   </div>
 
   <div class="decision">
-    <h3>The baseline was the floor, and the model cleared it</h3>
-    <p class="took">Curated 80.2% → 91.5%. Hard subset 63.6% → 83.9%.</p>
-    <p>gpt-oss-20b beat the TF-IDF baseline on both, and beat it by nearly
-    twice as much on the adversarial subset as on ordinary documents. That
-    asymmetry is the point: the boundary cases turn on negated clauses that a
-    bag of character n-grams cannot represent at all, and a transformer can.
-    It is the measured argument for fine-tuning an Arabic encoder rather than
-    an assumed one.</p>
-    <p>Both numbers carry a caveat stated in full in the evaluation report: the
-    model run covers 59 of 86 documents, stopped by a free-tier daily token
-    cap, and the missing 21 are the tail of the corpus rather than a random
-    sample.</p>
+    <h3>The baseline was the floor, and the model cleared it comfortably</h3>
+    <p class="took">Curated 80.2% → 97.7%. Hard subset 63.6% → 97.7%.
+    Two misroutes in 86 documents, no failed requests.</p>
+    <p>gpt-oss-120b did not merely beat the TF-IDF baseline — it closed the
+    difficulty gradient the corpus was built to expose. The baseline loses 16.6
+    points moving from ordinary documents to adversarial ones; this model loses
+    nothing measurable. The boundary cases turn on negated clauses that a bag
+    of character n-grams cannot represent at all, and a transformer can. That
+    is the measured argument for fine-tuning an Arabic encoder rather than an
+    assumed one.</p>
+    <p>A smaller model in the same family, gpt-oss-20b, landed between the two
+    at 91.5% / 83.9% on a partial run — so the gain is not a step change at
+    the first sign of a transformer, but scales with model size.</p>
+  </div>
+
+  <div class="limit">
+    <h3>The accuracy came at the cost of the review gate</h3>
+    <p>Not one of the 86 documents scored below the 0.55 review threshold, and
+    one of the two misroutes was returned at 0.92 confidence. The mechanism
+    built to hold doubtful documents for a human now holds nothing, and the
+    errors that remain are exactly the ones it cannot see. Whether that is an
+    improvement depends on what a misroute costs relative to a delay — which
+    is a question for the institution, not a number this project can produce.</p>
   </div>
 
   <div class="limit">
@@ -482,7 +493,7 @@ footer p{max-width:66ch}
     <tbody>
       <tr><td>Route Arabic documents to the right institution</td>
         <td><span class="status part">Demonstrated</span></td>
-        <td>gpt-oss-20b scores 91.5% curated and 83.9% hard, against a baseline of 80.2% / 63.6%. Measured on 59 of 86 documents and on synthetic text.</td></tr>
+        <td>gpt-oss-120b scores 97.7% on both the full corpus and the hard subset, against a baseline of 80.2% / 63.6%. All 86 documents, but synthetic text.</td></tr>
       <tr><td>Work without labeled training data</td>
         <td><span class="status met">Met</span></td>
         <td>Taxonomy-driven zero-shot design; 86-document authored corpus; 322 generated templates</td></tr>
@@ -535,7 +546,8 @@ footer p{max-width:66ch}
     <tbody>
       <tr><td>Rotate two exposed API keys</td><td>Nobody — do this now</td><td>Both the gateway key and the key used for the scoring run were pasted into a chat transcript. Neither is committed, but both must be treated as compromised.</td></tr>
       <tr><td>Tailnet device approval</td><td>The tailnet admin</td><td>Moves the measurement onto the model that will actually serve production, and back inside the network policy</td></tr>
-      <tr><td>Finish the corpus, and score the two unproven changes</td><td>One day of quota</td><td>Completes the missing 21 documents and settles whether the tiebreak and the compact prompt earn their place</td></tr>
+      <tr><td>A harder corpus</td><td>Nobody</td><td>At two errors in 86 the test set no longer discriminates between good models; new boundary cases must target the errors this model makes</td></tr>
+      <tr><td>A decision on what a misroute costs</td><td>The institution</td><td>Settles whether an inoperative review gate is acceptable, or whether another hold signal is needed</td></tr>
       <tr><td>Domain review of the taxonomy</td><td>A reviewer</td><td>Turns 14 assumed boundaries into agreed ones</td></tr>
       <tr><td>Real documents, even 50</td><td>The institution</td><td>Replaces every synthetic figure in this report with a measured one</td></tr>
       <tr><td>Set the GitHub repository description</td><td>Manual step in the web UI</td><td>Cosmetic; text is drafted</td></tr>

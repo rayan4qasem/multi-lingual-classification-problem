@@ -114,25 +114,25 @@ a{color:var(--accent)}
 
 <section>
   <div class="figures">
-    <div class="fig hero"><b>83.9%</b><span>gpt-oss, hardest subset</span></div>
+    <div class="fig hero"><b>97.7%</b><span>gpt-oss-120b, hardest subset</span></div>
     <div class="fig"><b>63.6%</b><span>baseline, same subset</span></div>
-    <div class="fig"><b>86</b><span>authored test documents</span></div>
+    <div class="fig"><b>86</b><span>documents, all scored</span></div>
     <div class="fig"><b>214</b><span>tests, 87% covered</span></div>
   </div>
   <p><strong>The headline number is the unflattering subset, not the
-  flattering one.</strong> Both classifiers score far higher on an easy
-  generator — the baseline gets 100% — but that measures a model against its
-  own phrasebook. The number worth acting on is what each does on documents
-  built to be hard, and the gap between them there is the finding:
-  <strong>+20.3 points</strong>, nearly double the gain on ordinary
-  documents.</p>
+  flattering one.</strong> The baseline scores 100% on an easy generator, which
+  measures a model against its own phrasebook. What matters is the adversarial
+  subset — and there gpt-oss-120b makes <strong>one error in 44</strong>,
+  against the baseline's sixteen. Across the whole corpus it misroutes two
+  documents out of 86.</p>
 
   <div class="note">
-    <p><b>The language model run is partial.</b> The free tier's daily token
-    cap was exhausted at 65 of 86 documents, so the gpt-oss figures rest on 59
-    scored documents (31 hard), and the 21 missing are the tail of the corpus
-    rather than a random sample. Treat them as a strong signal, not a settled
-    measurement. The baseline figures are complete.</p>
+    <p><b>The gap closed almost entirely.</b> For the baseline, hard documents
+    cost 16.6 points against ordinary ones (80.2% → 63.6%). For gpt-oss-120b
+    the difference is inside the noise: 97.6% on easy and medium documents,
+    97.7% on hard. The adversarial corpus was built to separate keyword
+    matching from reading, and it does — it just no longer separates this
+    model from itself.</p>
   </div>
 </section>
 
@@ -183,10 +183,16 @@ a{color:var(--accent)}
       <tr><td>Baseline — curated corpus, all</td><td class="n">86</td><td class="n">80.2%</td><td class="n">0.801</td></tr>
       <tr class="em"><td>Baseline — curated, hard subset</td><td class="n">44</td><td class="n">63.6%</td><td class="n">0.621</td></tr>
       <tr><td>gpt-oss-20b — curated corpus, all</td><td class="n">59</td><td class="n">91.5%</td><td class="n">—</td></tr>
-      <tr class="em"><td>gpt-oss-20b — curated, hard subset</td><td class="n">31</td><td class="n">83.9%</td><td class="n">—</td></tr>
+      <tr><td>gpt-oss-20b — curated, hard subset</td><td class="n">31</td><td class="n">83.9%</td><td class="n">—</td></tr>
+      <tr><td>gpt-oss-120b — curated corpus, all</td><td class="n">86</td><td class="n">97.7%</td><td class="n">—</td></tr>
+      <tr class="em"><td>gpt-oss-120b — curated, hard subset</td><td class="n">44</td><td class="n">97.7%</td><td class="n">—</td></tr>
     </tbody>
   </table>
   </div>
+
+  <p>The 20b rows cover 59 documents, cut short by a free-tier daily token cap;
+  the 120b rows are the complete corpus with no failed requests. Both models
+  were given the same prompt and the same taxonomy.</p>
 
   <p>The baseline's errors land where the taxonomy predicted they would, which
   is evidence the confusion pairs were declared correctly rather than guessed:
@@ -200,9 +206,29 @@ a{color:var(--accent)}
   labour <strong>1</strong>, transport ↔ municipal <strong>1</strong>). The
   GOSI case that defeats the baseline twice appears here once.</p>
 
+  <div class="limit">
+    <h3>The confidence gate stopped working — and that is the real result</h3>
+    <p>Across all 86 documents, gpt-oss-120b put <b>not one below the 0.55
+    review threshold</b>. Mean confidence 0.91. So the gate that exists to hold
+    doubtful documents for a human held nothing at all: coverage went to 100%,
+    and both misroutes were auto-routed.</p>
+    <p>Worse, one of them — <span class="ar">النيابة العامة</span> misrouted to
+    <span class="ar">الأمن العام</span> — came back at <b>0.92 confidence</b>.
+    The model was not hesitating and getting it wrong; it was certain and
+    wrong. No threshold set anywhere below 0.92 would have caught it.</p>
+    <p>This inverts the baseline's problem rather than fixing it. The baseline
+    was badly <em>under</em>-confident (ECE 0.337) and held half the archive
+    for nothing. This model is confident everywhere, so the same mechanism now
+    holds nothing. <b>A 97.7% accurate router with an inoperative review gate
+    is not obviously better in production than a weaker one that knows when to
+    ask</b> — it depends entirely on what a misroute costs, which is a question
+    for the institution, not for this report.</p>
+  </div>
+
   <div class="decision">
     <h3>Why the hard subset gains twice as much</h3>
-    <p class="took">Ordinary documents: +11.3 points. Hard subset: +20.3.</p>
+    <p class="took">20b over the baseline — ordinary documents: +11.3 points.
+    Hard subset: +20.3. At 120b the hard subset gap closes entirely.</p>
     <p>TF-IDF cannot represent negation. In the boundary case quoted above,
     the sentence that decides the answer is a denial — <em>there is no dispute
     with the employer</em> — and a bag of character n-grams sees only the
@@ -356,15 +382,18 @@ a{color:var(--accent)}
   </div>
 
   <div class="limit">
-    <h3>The language model run is partial, and it ran off-network</h3>
-    <p>59 of 86 documents, cut short by a free-tier daily token cap. The
-    missing 21 are the tail of the corpus, not a random sample, so the true
-    figure could move in either direction.</p>
-    <p>It also ran against a public endpoint rather than the self-hosted
-    gateway the deployment policy requires. That is defensible only because
-    the corpus is entirely synthetic — no real citizen data exists in it. The
-    gateway itself remains unreached, so the model that will actually serve
-    production has still never been measured.</p>
+    <h3>97.7% on synthetic text is a ceiling, not a forecast</h3>
+    <p>Two errors in 86 is a strong result on documents this project wrote —
+    and authored documents are cleaner than real ones in ways that flatter a
+    model: consistent register, no OCR damage, no missing pages, no letters
+    that are genuinely about two things at once. The measured figure is what
+    the model does on a fair adversarial test, not what it will do on a mail
+    room's intake.</p>
+    <p>The run also used a public endpoint rather than the self-hosted gateway
+    the deployment policy requires. Defensible only because the corpus is
+    synthetic — no real citizen data exists in it — but the gateway remains
+    unreached, so the model that will actually serve production has still never
+    been measured.</p>
   </div>
 
   <div class="limit">
@@ -397,9 +426,15 @@ a{color:var(--accent)}
     <li><strong>Gateway access</strong> would move the measurement onto the
       model that will actually serve production, and onto the network policy
       the deployment requires.</li>
-    <li><strong>One more day of quota</strong> completes the remaining 21
-      documents and settles whether the tiebreak and the compact prompt earn
-      their place — both are built, tested and unproven.</li>
+    <li><strong>A harder corpus.</strong> At two errors in 86, this test set has
+      stopped discriminating between good models — it can no longer show whether
+      a change helped. The next round of boundary cases has to be written
+      against the errors this model actually makes, not the ones the baseline
+      made.</li>
+    <li><strong>A decision on what a misroute costs.</strong> The confidence
+      gate is now inoperative, so the choice is between routing everything
+      automatically and finding another signal to hold on. That is a business
+      question, and it is the one this report cannot answer.</li>
   </ul>
 </section>
 

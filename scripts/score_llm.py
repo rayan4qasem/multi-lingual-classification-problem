@@ -29,6 +29,9 @@ def main() -> None:
     ap.add_argument("--model", required=True)
     ap.add_argument("--rpm", type=int, default=28, help="requests per minute cap")
     ap.add_argument("--tag", default=None, help="output name; defaults to the model")
+    ap.add_argument("--detail", default="full", choices=["full", "compact"])
+    ap.add_argument("--reasoning-effort", default=None, dest="effort")
+    ap.add_argument("--tiebreak", action="store_true")
     args = ap.parse_args()
 
     tax = T.load("config/taxonomy.yaml")
@@ -42,7 +45,18 @@ def main() -> None:
         done = json.loads(out.read_text(encoding="utf-8"))
         print(f"resuming: {len(done)} already scored")
 
-    clf = OpenAICompatClassifier(model=args.model, taxonomy=tax)
+    clf = OpenAICompatClassifier(
+        model=args.model,
+        taxonomy=tax,
+        detail=args.detail,
+        reasoning_effort=args.effort,
+    )
+    if args.tiebreak:
+        from docrouter.classify.tiebreak import LLMPairResolver, TiebreakClassifier
+
+        clf = TiebreakClassifier(
+            clf, LLMPairResolver(clf.client, args.model, tax), tax
+        )
     gap = 60.0 / args.rpm
 
     for i, d in enumerate(docs, 1):
